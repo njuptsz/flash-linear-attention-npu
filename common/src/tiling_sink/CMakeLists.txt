@@ -1,9 +1,11 @@
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 cmake_minimum_required(VERSION 3.16)
 
@@ -14,6 +16,9 @@ set(CMAKE_SKIP_RPATH TRUE)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/intf.cmake)
 
 set(ATTENTION_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../../../attention)
+
+file(GLOB_RECURSE ARCH35_CHECKER_SRC_FILES
+    ${ATTENTION_SRC}/fused_infer_attention_score/op_host/checkers/*checker*.cpp)
 set(src_files
   ${ATTENTION_SRC}/common/op_host/fia_tiling_info.cpp
   ${ATTENTION_SRC}/common/op_host/arch32/fia_tiling_nonquant_mla.cpp
@@ -22,16 +27,19 @@ set(src_files
   ${ATTENTION_SRC}/common/op_host/fia_tiling_shape.cpp
   ${ATTENTION_SRC}/common/op_host/split_core.cpp
   ${ATTENTION_SRC}/fused_infer_attention_score/op_host/fused_infer_attention_score_tiling.cpp
+  ${ATTENTION_SRC}/fused_infer_attention_score/op_host/fused_infer_attention_score_tiling_info_parser.cpp
   ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch32/fused_infer_attention_score_tiling_check.cpp
   ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch32/fused_infer_attention_score_tiling_check_single_para.cpp
   ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch32/fused_infer_attention_score_tiling_check_existence.cpp
   ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch32/fused_infer_attention_score_tiling_check_feature.cpp
   ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch32/fused_infer_attention_score_tiling_check_consistency.cpp
-  ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch32/fused_infer_attention_score_tiling_info_parser.cpp
   ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch32/fused_infer_attention_score_tiling_v3.cpp
-  ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch35/fused_infer_attention_score_tiling_v2.cpp
+  ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch35/fused_infer_attention_score_tiling_v4.cpp
+  ${ATTENTION_SRC}/fused_infer_attention_score/op_host/arch35/fused_infer_attention_score_tiling_impl.cpp
+  ${ARCH35_CHECKER_SRC_FILES}
   ${ATTENTION_SRC}/prompt_flash_attention/op_host/prompt_flash_attention_tiling.cpp
   ${ATTENTION_SRC}/prompt_flash_attention/op_host/prompt_flash_attention_tiling_v2.cpp
+  ${ATTENTION_SRC}/prompt_flash_attention/op_host/prompt_flash_attention_tiling_arch38.cpp
   ${ATTENTION_SRC}/incre_flash_attention/op_host/incre_flash_attention_tiling.cpp
   ${ATTENTION_SRC}/incre_flash_attention/op_host/incre_flash_attention_tiling_v2.cpp
   ${ATTENTION_SRC}/incre_flash_attention/op_host/incre_flash_attention_tiling_check.cpp
@@ -100,9 +108,12 @@ else ()
     ${TOP_DIR}/ops-base/pkg_inc/aicpu_common/context/common
     ${TOP_DIR}/ops-base/pkg_inc/aicpu_common/context/utils
     ${TOP_DIR}/ops-base/pkg_inc/aicpu_common/context/cpu_proto
+    ${TOP_DIR}/air/inc/graph_metadef/external
+    ${TOP_DIR}/air/inc/graph_metadef
     ${TOP_DIR}/metadef/inc/external
     ${TOP_DIR}/metadef/inc
     ${TOP_DIR}/abl/slog/inc/toolchain
+    ${TOP_DIR}/air/inc/graph_metadef/external/base
     ${TOP_DIR}/metadef/inc/external/base
     ${TOP_DIR}/abl/slog/inc
   )

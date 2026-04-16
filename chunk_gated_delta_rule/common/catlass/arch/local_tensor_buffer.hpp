@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
  
 #ifndef INCLUDE_CATLASS_ARCH_MEMORY_H
@@ -90,7 +91,7 @@ public:
 
 ///////////////////////////////////////////////////////////
 
-/// Partial specialization for AtlasA2, TPosition::B2
+/// Partial specialization for TPosition::B2
 template <class ArchTag>
 struct LocalTensorBuffer<ArchTag, AscendC::TPosition::B2> : LocalTensorBufferBase {
 public:
@@ -107,11 +108,10 @@ public:
 
 ///////////////////////////////////////////////////////////
 
-/// Partial specialization for AtlasA2, TPosition::C1
-template <>
-struct LocalTensorBuffer<Arch::AtlasA2, AscendC::TPosition::C1> : LocalTensorBufferBase {
+/// Partial specialization for TPosition::C1
+template <class ArchTag>
+struct LocalTensorBuffer<ArchTag, AscendC::TPosition::C1> : LocalTensorBufferBase {
 public:
-    using ArchTag = Arch::AtlasA2;
     static constexpr AscendC::TPosition Position = AscendC::TPosition::C1;
 
     CATLASS_DEVICE
@@ -125,11 +125,10 @@ public:
 
 ///////////////////////////////////////////////////////////
 
-/// Partial specialization for AtlasA2, TPosition::C2
-template <>
-struct LocalTensorBuffer<Arch::AtlasA2, AscendC::TPosition::C2> : LocalTensorBufferBase {
+/// Partial specialization for TPosition::C2
+template <class ArchTag>
+struct LocalTensorBuffer<ArchTag, AscendC::TPosition::C2> : LocalTensorBufferBase {
 public:
-    using ArchTag = Arch::AtlasA2;
     static constexpr AscendC::TPosition Position = AscendC::TPosition::C2;
 
     CATLASS_DEVICE
@@ -160,11 +159,10 @@ public:
 
 ///////////////////////////////////////////////////////////
 
-/// Partial specialization for AtlasA2, TPosition::C2PIPE2GM
-template <>
-struct LocalTensorBuffer<Arch::AtlasA2, AscendC::TPosition::C2PIPE2GM> : LocalTensorBufferBase {
+/// Partial specialization for TPosition::C2PIPE2GM
+template <class ArchTag>
+struct LocalTensorBuffer<ArchTag, AscendC::TPosition::C2PIPE2GM> : LocalTensorBufferBase {
 public:
-    using ArchTag = Arch::AtlasA2;
     static constexpr AscendC::TPosition Position = AscendC::TPosition::C2PIPE2GM;
 
     CATLASS_DEVICE

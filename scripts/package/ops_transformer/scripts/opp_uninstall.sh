@@ -2,9 +2,11 @@
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 OPERATE_FAILED="0x0001"
@@ -178,12 +180,45 @@ remove_init_py() {
   [ -e ${built_in_impl_path}/dynamic/__init__.py ] && rm ${built_in_impl_path}/dynamic/__init__.py > /dev/null 2>&1
 }
 
+remove_whl_package() {
+  local python_dir="${TARGET_VERSION_DIR}/python/site-packages"
+
+  if [ -d "${python_dir}/npu_ops_transformer" ]; then
+    logandprint "[INFO]: Removing npu_ops_transformer whl package from ${python_dir}"
+
+    # 尝试使用 pip 卸载
+    if command -v pip3 &>/dev/null; then
+      pip3 uninstall -y npu_ops_transformer --target="${python_dir}" 2>/dev/null
+    fi
+
+    # 直接删除目录（确保清理干净）
+    rm -rf "${python_dir}/npu_ops_transformer" 2>/dev/null
+    rm -f ${python_dir}/npu_ops_transformer-*.whl 2>/dev/null
+    rm -rf ${python_dir}/npu_ops_transformer-*.egg-info 2>/dev/null
+    rm -rf ${python_dir}/npu_ops_transformer-*.dist-info 2>/dev/null
+
+    # 如果目录为空，删除它
+    if [ -d "${python_dir}" ] && [ -z "$(ls -A ${python_dir} 2>/dev/null)" ]; then
+      rm -rf "${python_dir}"
+      # 如果 python 目录也为空，删除它
+      local python_parent="${TARGET_VERSION_DIR}/python"
+      if [ -d "${python_parent}" ] && [ -z "$(ls -A ${python_parent} 2>/dev/null)" ]; then
+        rm -rf "${python_parent}"
+      fi
+    fi
+
+    logandprint "[INFO]: npu_ops_transformer whl package removed"
+  fi
+}
+
 remove_ops_transformer() {
   if [ "$(id -u)" != 0 ] && [ ! -w "${TARGET_OPP_BUILT_IN}" ]; then
     chmod u+w -R "${TARGET_OPP_BUILT_IN}" 2>/dev/null
   fi
 
   remove_init_py
+
+  remove_whl_package
 
   remove_module
 
@@ -192,6 +227,45 @@ remove_ops_transformer() {
     rm -f "${INSTALL_INFO_FILE}"
     log_with_errorlevel "$?" "warn" "[WARNING] Delete ops install info file failed, please delete it by yourself."
   fi
+}
+
+whl_uninstall_package() {
+    local _module="$1"
+    local _module_path="$2"
+    if [ ! -d "${_module_path}/${_module}" ]; then
+        pip3 show "${_module}" > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            logandprint "[WARNING]: ${_module} is not exist."
+        else
+            pip3 uninstall -y "${_module}" 1> /dev/null
+            local ret=$?
+            if [ $ret -ne 0 ]; then
+                logandprint "[WARNING]: uninstall ${_module} failed, error code: $ret."
+                exit 1
+            else
+                logandprint "[INFO]: ${_module} uninstalled successfully!"
+            fi
+        fi
+    else
+        export PYTHONPATH="${_module_path}"
+        pip3 uninstall -y "${_module}" > /dev/null 2>&1
+        local ret=$?
+        if [ $ret -ne 0 ]; then
+            logandprint "[WARNING]: uninstall ${_module} failed, error code: $ret."
+            exit 1
+        else
+            logandprint "[INFO]: ${_module} uninstalled successfully!"
+        fi
+    fi
+}
+
+uninstall_es_whl() {
+    local python_es_whl_name="es_transformer"
+    local whl_install_dir_path="${TARGET_VERSION_DIR}/python/site-packages"
+    chmod u+w "${whl_install_dir_path}" 2> /dev/null
+    chmod u+w -R "${whl_install_dir_path}"/es_transformer 2> /dev/null
+    chmod u+w -R "${whl_install_dir_path}"/es_transformer-*.dist-info 2> /dev/null
+    whl_uninstall_package "${python_es_whl_name}" "${whl_install_dir_path}"
 }
 
 logandprint "[INFO]: Begin uninstall the opp module."
@@ -209,6 +283,8 @@ main() {
 
   unsetenv
 
+  uninstall_es_whl
+  
   remove_ops_transformer
 
   if [ "${UNINSTALL_MODE}" != "upgrade" ]; then

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # coding: utf-8
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 """
 生成 TilingData 桩
@@ -167,14 +169,15 @@ class Process:
         bgn_src: str = \
             ("/**\n"
              " * This program is free software, you can redistribute it and/or modify.\n"
-             " * Copyright (c) {year} Tianjin University, Ltd.\n"
+             " * Copyright (c) {year} Huawei Technologies Co., Ltd.\n"
              " * This file is a part of the CANN Open Software.\n"
-             " * Licensed under the BSD 3-Clause License (the \"License\").\n"
+             " * Licensed under CANN Open Software License Agreement Version 2.0 (the \"License\").\n"
              " * Please refer to the License for details. "
              "You may not use this file except in compliance with the License.\n"
              " * THIS SOFTWARE IS PROVIDED ON AN \"AS IS\" BASIS, "
              "WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, "
              "INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.\n"
+             " * See LICENSE in the root of the software repository for the full text of the License.\n"
              " */\n").format(year=datetime.datetime.today().year)
         bgn_src += "\n"
         bgn_src += \

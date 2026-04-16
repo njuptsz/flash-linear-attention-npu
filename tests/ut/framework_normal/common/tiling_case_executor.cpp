@@ -1,10 +1,11 @@
 /**
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #include "tiling_case_executor.h"
@@ -13,6 +14,10 @@
 #include <nlohmann/json.hpp>
 #include "platform/platform_infos_def.h"
 #include "base/registry/op_impl_space_registry_v2.h"
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <cstdint>
 
 #define DO_TILING(tilingPara)                                                                                          \
     auto contextFaker = gert::TilingContextFaker();                                                                    \
@@ -126,19 +131,71 @@
     map<string, string> socInfos;                                                                                      \
     map<string, string> aicoreSpec;                                                                                    \
     map<string, string> intrinsics;                                                                                    \
-    map<string, string> socversions = {{"Short_SoC_version", tilingContextPara.socVersion_}};                          \
+    map<string, string> versions;                                                                                      \
+    string version = tilingContextPara.socVersion_;                                                                    \
+    if (isNpuArchString(version)) {                                                                                    \
+        map<string, string> archToSoc = {                                                                              \
+            {"3510", "Ascend950"}                                                                                   \
+        };                                                                                                             \
+        versions = {{"NpuArch", tilingContextPara.socVersion_},                                                        \
+                    {"Short_SoC_version", archToSoc[tilingContextPara.socVersion_]}};                                  \
+    } else {                                                                                                           \
+        map<string, string> socToArch = {                                                                              \
+            {"Ascend310P", "2002"},                                                                                    \
+            {"Ascend910B", "2201"},                                                                                    \
+            {"Ascend910_93", "2201"},                                                                                  \
+            {"Ascend950", "3510"}                                                                                   \
+        };                                                                                                             \
+        versions = {                                                                                                   \
+            {"NpuArch", socToArch[tilingContextPara.socVersion_]},                                                     \
+            {"Short_SoC_version", tilingContextPara.socVersion_}                                                       \
+        };                                                                                                             \
+    }                                                                                                                  \
     GetPlatFormInfos(compileInfoString.c_str(), socInfos, aicoreSpec, intrinsics);                                     \
     auto tilingContext = contextHolder.GetContext();                                                                   \
     tilingContext->GetPlatformInfo()->SetPlatformRes("SoCInfo", socInfos);                                             \
     tilingContext->GetPlatformInfo()->SetPlatformRes("AICoreSpec", aicoreSpec);                                        \
     tilingContext->GetPlatformInfo()->SetCoreNumByCoreType("AICore");                                                  \
     tilingContext->GetPlatformInfo()->SetPlatformRes("AICoreintrinsicDtypeMap", intrinsics);                           \
-    tilingContext->GetPlatformInfo()->SetPlatformRes("version", socversions);                                          \
+    tilingContext->GetPlatformInfo()->SetPlatformRes("version", versions);                                             \
     /* 3. get tiling func */                                                                                           \
     auto spaceRegistry = gert::DefaultOpImplSpaceRegistryV2::GetInstance().GetSpaceRegistry();                         \
     auto tilingFunc = spaceRegistry->GetOpImpl(tilingContextPara.opName_.c_str())->tiling;                             \
     /* 4. check tiling func */                                                                                         \
     auto tilingRet = tilingFunc(tilingContext);
+
+static bool isNpuArchString(string version)
+{
+    if(version.empty()){
+        return false;
+    }
+
+    for(char c : version) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static std::string to_string_fnv_hash(const void* buf, size_t size)
+{
+    const uint8_t* data = static_cast<const uint8_t*>(buf);
+    constexpr uint64_t FNV_OFFSET = 0xcbf29ce484222325ULL; // FNV偏移基础值
+    constexpr uint64_t FNV_PRIME = 0x100000001b3ULL; // FNV质数
+    constexpr uint64_t FNV_OUTPUT_LEN = 16; // FNV输出数据长度
+
+    // FNV-1a算法
+    uint64_t hash = FNV_OFFSET;
+    for (size_t i = 0; i < size; ++i) {
+        hash ^= static_cast<uint64_t>(data[i]);
+        hash *= FNV_PRIME;
+    }
+
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0') << std::setw(FNV_OUTPUT_LEN) << hash;
+    return ss.str();
+}
 
 template <typename T>
 static string to_string(void* buf, size_t size, unordered_set<size_t> mask={})
@@ -188,7 +245,6 @@ static void GetPlatFormInfos(const char* compileInfoStr, map<string, string>& so
                                        {"cube_core_cnt", "cube_core_cnt"},
                                        {"vector_core_cnt", "vector_core_cnt"},
                                        {"core_type_list", "core_type_list"}};
-    socInfos["core_type_list"] = "AICore";
 
     for (auto &t : socInfoKeys) {
         if (compileInfoJson.contains("hardware_info") && compileInfoJson["hardware_info"].contains(t.second)) {
@@ -200,6 +256,14 @@ static void GetPlatFormInfos(const char* compileInfoStr, map<string, string>& so
             }
         }
     }
+
+    if (socInfos.find("cube_core_cnt") != socInfos.end() &&
+        socInfos.find("vector_core_cnt") != socInfos.end()) {
+        socInfos["core_type_list"] = "CubeCore,VectorCore";
+    } else {
+        socInfos["core_type_list"] = "AICore";
+    }
+
     map<string, string> aicoreSpecKeys = {{"ub_size", "UB_SIZE"},
                                           {"l0_a_size", "L0A_SIZE"},
                                           {"l0_b_size", "L0B_SIZE"},
@@ -238,7 +302,8 @@ void ExecuteTestCase(const gert::TilingContextPara& tilingContextPara,
                      uint64_t                       expectTilingKey,
                      const string&                  expectTilingData,
                      const std::vector<size_t>&     expectWorkspaces,
-                     uint64_t                       tilingDataReservedLen)
+                     uint64_t                       tilingDataReservedLen,
+                     bool                           useHashTilingData)
 {
     DO_TILING(tilingContextPara);
 
@@ -267,9 +332,13 @@ void ExecuteTestCase(const gert::TilingContextPara& tilingContextPara,
     if (expectTilingData != "") {
         auto rawTilingData = tilingContext->GetRawTilingData();
         auto tilingDataReservedSize = tilingDataReservedLen * sizeof(uint64_t);
-        auto tilingDataResult = to_string<int64_t>(rawTilingData->GetData() + tilingDataReservedSize,
-                                                   rawTilingData->GetDataSize() - tilingDataReservedSize,
-                                                   GetMask(expectTilingData));
+        ASSERT_LE(tilingDataReservedSize, rawTilingData->GetDataSize());
+        auto tilingDataResult = useHashTilingData ?
+            to_string_fnv_hash(rawTilingData->GetData() + tilingDataReservedSize,
+                           rawTilingData->GetDataSize() - tilingDataReservedSize) :
+            to_string<int64_t>(rawTilingData->GetData() + tilingDataReservedSize,
+                            rawTilingData->GetDataSize() - tilingDataReservedSize,
+                            GetMask(expectTilingData));
         EXPECT_EQ(tilingDataResult, expectTilingData);
     }
 }

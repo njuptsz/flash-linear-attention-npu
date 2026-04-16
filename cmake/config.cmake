@@ -1,9 +1,11 @@
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 ########################################################################################################################
@@ -16,18 +18,6 @@ if ((NOT Python3_FOUND) OR (${Python3_EXECUTABLE} STREQUAL ""))
     message(FATAL_ERROR "Can't find python3.")
 endif ()
 set(HI_PYTHON   "${Python3_EXECUTABLE}" CACHE   STRING   "python executor")
-
-# 获取基础 CANN 路径
-if (CUSTOM_ASCEND_CANN_PACKAGE_PATH)
-    set(ASCEND_CANN_PACKAGE_PATH  ${CUSTOM_ASCEND_CANN_PACKAGE_PATH})
-elseif (DEFINED ENV{ASCEND_HOME_PATH})
-    set(ASCEND_CANN_PACKAGE_PATH  $ENV{ASCEND_HOME_PATH})
-elseif (DEFINED ENV{ASCEND_OPP_PATH})
-    get_filename_component(ASCEND_CANN_PACKAGE_PATH "$ENV{ASCEND_OPP_PATH}/.." ABSOLUTE)
-else()
-    set(ASCEND_CANN_PACKAGE_PATH  "/usr/local/Ascend/latest")
-endif ()
-message(STATUS "ASCEND_CANN_PACKAGE_PATH=${ASCEND_CANN_PACKAGE_PATH}")
 
 ########################################################################################################################
 # 公共配置
@@ -260,6 +250,8 @@ if (BUILD_OPEN_PROJECT)
                 --build_type ${BUILD_TYPE}
                 --version ${VERSION}
                 --enable_oom ${ENABLE_OOM}
+                --enable_tiling_sink ${ENABLE_TILING_SINK}
+                --enable_aicpu ${ENABLE_AICPU}
                 RESULT_VARIABLE result
                 OUTPUT_STRIP_TRAILING_WHITESPACE
                 OUTPUT_VARIABLE PREPARE_BUILD_OUTPUT_VARIABLE)

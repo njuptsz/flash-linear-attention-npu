@@ -1,47 +1,47 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
- * Licensed under the BSD 3-Clause License (the "License").
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_CONV_TILE_COPY_L1_TO_L0B_HPP
 #define CATLASS_CONV_TILE_COPY_L1_TO_L0B_HPP
 
-#include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
-#include "catlass/layout/layout.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
 
 namespace Catlass::Conv::Tile {
 
-template <
-    class ArchTag,
-    class L1Type,
-    class L0Type = void
->
+template <class ArchTag, class L1Type, class L0Type = void>
 struct CopyL1ToL0B {
     static_assert(DEPENDENT_FALSE<ArchTag>, "Unsupported copy l1 to l0, can not find the specialization.");
 };
 
-template<class ArchTag, class Element>
-struct CopyL1ToL0B<ArchTag, Catlass::Gemm::GemmType<Element, layout::CI1KHKWCOCI0, AscendC::TPosition::A1>>{
+template <class ArchTag, class Element>
+struct CopyL1ToL0B<ArchTag, Catlass::Gemm::GemmType<Element, layout::CI1KHKWCOCI0, AscendC::TPosition::A1>> {
     using LayoutDst = layout::nZ;
     using LayoutSrc = layout::CI1KHKWCOCI0;
 
-    static constexpr uint32_t ELE_NUM_PER_C0 =  BYTE_PER_C0 / sizeof(Element);
+    static constexpr uint32_t ELE_NUM_PER_C0 = BYTE_PER_C0 / sizeof(Element);
     static constexpr uint32_t ELE_NUM_PER_FRACTAL = BYTE_PER_FRACTAL / sizeof(Element);
 
     CATLASS_DEVICE
-    CopyL1ToL0B() {};
+    CopyL1ToL0B(){};
 
     CATLASS_DEVICE
     void operator()(
         AscendC::LocalTensor<Element> dstTensor,
         AscendC::LocalTensor<Element> srcTensor,
-        LayoutDst const &layoutDst, LayoutSrc const &layoutSrc)
+        LayoutDst const &layoutDst,
+        LayoutSrc const &layoutSrc
+    )
     {
         AscendC::LoadData2DParams loadDataParams;
 
@@ -55,9 +55,7 @@ struct CopyL1ToL0B<ArchTag, Catlass::Gemm::GemmType<Element, layout::CI1KHKWCOCI
 
         for (uint32_t i = 0; i < layoutDst.shape(1); i++) {
             AscendC::LoadData(
-                dstTensor[i * layoutDst.stride(1)],
-                srcTensor[i * layoutSrc.shape(3) * ELE_NUM_PER_C0],
-                loadDataParams
+                dstTensor[i * layoutDst.stride(1)], srcTensor[i * layoutSrc.shape(3) * ELE_NUM_PER_C0], loadDataParams
             );
         }
     }

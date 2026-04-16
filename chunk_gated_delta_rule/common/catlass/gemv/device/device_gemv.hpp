@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_GEMV_DEVICE_GEMV_UNIVERSAL_ADAPTER_HPP
@@ -71,24 +72,11 @@ public:
     /// Supplied params struct must be construct by calling matmul Kernel::to_underling arguments
     inline Status Run(aclrtStream stream, uint32_t blockDim, uint64_t fftsAddr)
     {
-#if defined(ENABLE_ASCENDC_DUMP)
-        uint8_t *ptrDump{nullptr};
-        aclCheck(aclrtMalloc(reinterpret_cast<void **>(&ptrDump), ALL_DUMPSIZE, ACL_MEM_MALLOC_HUGE_FIRST));
-        if (fftsAddr == 0) {
-            Catlass::KernelAdapter<GemvKernel><<<blockDim, nullptr, stream>>>(params_, ptrDump);
-        } else {
-            Catlass::KernelAdapter<GemvKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr, ptrDump);
-        }
-        aclCheck(aclrtSynchronizeStream(stream));
-        Adx::AdumpPrintWorkSpace(ptrDump, ALL_DUMPSIZE, stream, "device_gemm");
-        aclCheck(aclrtFree(ptrDump));
-#else
         if (fftsAddr == 0) {
             Catlass::KernelAdapter<GemvKernel><<<blockDim, nullptr, stream>>>(params_);
         } else {
             Catlass::KernelAdapter<GemvKernel><<<blockDim, nullptr, stream>>>(params_, fftsAddr);
         }
-#endif
         return Status::kSuccess;
     }
 

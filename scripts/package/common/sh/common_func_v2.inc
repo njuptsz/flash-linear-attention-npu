@@ -2,9 +2,11 @@
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 # 公共函数库
@@ -564,11 +566,16 @@ unpack_feature_param() {
 
 # 展开version.info文件中参数
 expand_version_file() {
-    if [ "${VERSION_FILE}" = "" ]; then
-        return 0
+    local install_path="$1"
+
+    if [ "${VERSION_FILE}" != "" ]; then
+        get_version "VERSION" "${VERSION_FILE}"
+        get_version_dir "VERSION_DIR" "${VERSION_FILE}"
     fi
-    get_version "VERSION" "${VERSION_FILE}"
-    get_version_dir "VERSION_DIR" "${VERSION_FILE}"
+
+    if [ -n "$VERSION_DIR" ] && [ -L "$install_path/$VERSION_DIR" ]; then
+        VERSION_DIR="$(basename "$(readlink "$install_path/$VERSION_DIR")")"
+    fi
 }
 
 # 提取第一项
@@ -1255,7 +1262,7 @@ filter_feature_param() {
 # 读取fileist的第2行到最后行
 tail_filelist() {
     local filelist_path="$1"
-    tail -n +2 "$filelist_path"
+    tail -n +2 "$filelist_path" | grep -v '^#'
 }
 
 # 解析filelist.csv脚本

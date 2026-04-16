@@ -33,6 +33,14 @@ output/
 __pycache__
 MANIFEST.in
 
+# torch_custom build artifacts
+torch_custom/aclnn_extension/aclnn_extension.egg-info/
+torch_custom/aclnn_extension/build/
+torch_custom/aclnn_extension/dist/
+torch_custom/aclnn_extension/npu_native_functions_bycodegen.yaml
+torch_custom/aclnn_extension/op_plugin/
+torch_custom/aclnn_extension/torch_npu/
+
 #gdn cache
 /third_party
 chunk_gated_delta_rule/chunk_bwd_dqkwg/tests/result

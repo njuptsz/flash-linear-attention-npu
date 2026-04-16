@@ -15,7 +15,13 @@
 #define CHUNK_GATED_DELTA_RULE_BWD_DHU_CUBE_H
 #endif
 
-#include "kernel_operator.h"
+#if defined(__CCE_AICORE__) && __CCE_AICORE__ == 310
+    #define CATLASS_ARCH 3510
+#else
+    #define CATLASS_ARCH 2201
+#endif
+
+#include "chunk_gated_delta_rule_bwd_dhu_base.h"
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
@@ -27,9 +33,9 @@
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
 
-#include "chunk_gated_delta_rule_bwd_dhu_base.h"
 
 using namespace Catlass;
+using namespace tla;
 using namespace ChunkGDRBwdDhu;
 
 namespace Catlass::Gemm::Kernel {
@@ -287,7 +293,11 @@ public:
                                                     tla::MakeShape(curBT, params.V));
                         using CopyGmToL1A_Bdv = typename TileCopyBdv::template CopyGmToL1A<decltype(tensorBlockK)>;
                         using CopyGmToL1B_Bdv = typename TileCopyBdv::template CopyGmToL1B<decltype(tensorBlockDh)>;
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+                        using CopyL0CToGm_Bdv = typename TileCopyBdv::template CopyL0CToDst<decltype(tensorBlockBdv)>;
+#else
                         using CopyL0CToGm_Bdv = typename TileCopyBdv::template CopyL0CToGm<decltype(tensorBlockBdv)>;
+#endif
                         CopyGmToL1A_Bdv copyGmToL1A_Bdv;
                         CopyGmToL1B_Bdv copyGmToL1B_Bdv;
                         CopyL0CToGm_Bdv copyL0CToGm_Bdv;
@@ -327,8 +337,7 @@ public:
                         auto tensorTileL0C = GetTile(tensorL0C,
                                                      tla::MakeCoord(0,0),
                                                      tla::MakeShape(curBT, params.V));
-                        tileMmadBdv(tensorTileL0C, tensorL0A, tensorL0B,
-                                    curBT, params.V, params.K, initC, unitFlag);
+                        tileMmadBdv(tensorTileL0C, tensorL0A, tensorL0B, initC, unitFlag);
                         
                         PipeBarrier<PIPE_ALL>();
                         copyL0CToGm_Bdv(tensorBlockBdv, tensorL0C);
@@ -375,14 +384,22 @@ public:
 
                         using CopyGmToL1A_Dh1 = typename TileCopyDh1::template CopyGmToL1A<decltype(tensorBlockGq)>;
                         using CopyGmToL1B_Dh1 = typename TileCopyDh1::template CopyGmToL1B<decltype(tensorBlockDo)>;
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+                        using CopyL0CToGm_Dh1 = typename TileCopyDh1::template CopyL0CToDst<decltype(tensorBlockDh1)>;
+#else
                         using CopyL0CToGm_Dh1 = typename TileCopyDh1::template CopyL0CToGm<decltype(tensorBlockDh1)>;
+#endif
                         CopyGmToL1A_Dh1 copyGmToL1A_Dh1;
                         CopyGmToL1B_Dh1 copyGmToL1B_Dh1;
                         CopyL0CToGm_Dh1 copyL0CToGm_Dh1;
 
                         using CopyGmToL1A_Dh2 = typename TileCopyDh2::template CopyGmToL1A<decltype(tensorBlockW)>;
                         using CopyGmToL1B_Dh2 = typename TileCopyDh2::template CopyGmToL1B<decltype(tensorBlockDv2)>;
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+                        using CopyL0CToGm_Dh2 = typename TileCopyDh2::template CopyL0CToDst<decltype(tensorBlockDh2)>;
+#else
                         using CopyL0CToGm_Dh2 = typename TileCopyDh2::template CopyL0CToGm<decltype(tensorBlockDh2)>;
+#endif
                         CopyGmToL1A_Dh2 copyGmToL1A_Dh2;
                         CopyGmToL1B_Dh2 copyGmToL1B_Dh2;
                         CopyL0CToGm_Dh2 copyL0CToGm_Dh2;
@@ -460,8 +477,7 @@ public:
                         PipeBarrier<PIPE_ALL>();
 
 
-                        tileMmadDh1(tensorTileL0C1, tensorL0A1, tensorL0B1,
-                                    params.K, params.V, curBT, initC, unitFlag);
+                        tileMmadDh1(tensorTileL0C1, tensorL0A1, tensorL0B1, initC, unitFlag);
                         PipeBarrier<PIPE_ALL>();
                         copyL0CToGm_Dh1(tensorBlockDh1, tensorL0C1);
                         PipeBarrier<PIPE_ALL>();
@@ -481,8 +497,7 @@ public:
 
                         // bool initC = true; //k方向没有循环
                         // uint8_t unitFlag = 0;
-                        tileMmadDh2(tensorTileL0C2, tensorL0A2, tensorL0B2,
-                                    params.K, params.V, curBT, initC, unitFlag);
+                        tileMmadDh2(tensorTileL0C2, tensorL0A2, tensorL0B2, initC, unitFlag);
                         PipeBarrier<PIPE_ALL>();
                         copyL0CToGm_Dh2(tensorBlockDh2, tensorL0C2);
                         PipeBarrier<PIPE_ALL>();
@@ -665,7 +680,11 @@ __aicore__ inline void GDRCube<DT, GT>::Process()
     LayoutTagCuSeqlens tagCuSeqlens = LayoutTagCuSeqlens::MakeLayout<int64_t>(1, this->seqNum + 1);
     LayoutTagChunkIndices tagChunkIndices = LayoutTagChunkIndices::MakeLayout<int64_t>(this->chunkNum, 2);
 
+#if defined(__CCE_AICORE__) && __CCE_AICORE__ == 310
+    using ArchTag = Arch::Ascend950;
+#else
     using ArchTag = Arch::AtlasA2;
+#endif
 
     auto layoutK = MakeLayoutFromTag(tagK);
     auto layoutDh = MakeLayoutFromTag(tagDh);

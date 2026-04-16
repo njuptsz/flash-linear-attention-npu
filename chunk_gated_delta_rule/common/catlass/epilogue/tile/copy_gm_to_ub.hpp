@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_EPILOGUE_TILE_TILE_COPY_GM_TO_UB_HPP
@@ -178,6 +179,65 @@ struct CopyGm2UbAligned<Arch::AtlasA2, Gemm::GemmType<Element, layout::RowMajor>
                 DataCopy(dstTensor[i * layoutDst.stride(0)], srcTensor[i * layoutSrc.stride(0)], cols);
             }
         }
+    };
+};
+
+
+//////////////////////////// CopyGm2Ub(Ascend950, No TLA) ////////////////////////////
+// Partial specialization for CopyGm2Ub(Ascend950, No TLA), RowMajor in and RowMajor out.
+template <class Element>
+struct CopyGm2Ub<Arch::Ascend950, Gemm::GemmType<Element, layout::RowMajor>> {
+    using LayoutSrc = layout::RowMajor;
+    using LayoutDst = layout::RowMajor;
+    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
+
+    CATLASS_DEVICE
+    CopyGm2Ub() = default;
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        layout::RowMajor const &layoutDst,
+        layout::RowMajor const &layoutSrc)
+    {
+        AscendC::DataCopyExtParams dataCopyParams(
+            layoutSrc.shape(0),
+            layoutSrc.shape(1) * sizeof(Element),
+            (layoutSrc.stride(0) - layoutSrc.shape(1)) * sizeof(Element),
+            (layoutDst.stride(0) - layoutDst.shape(1)) / ELE_NUM_PER_BLK,
+            0
+        );
+        AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
+    }
+};
+
+template <class Element>
+struct CopyGm2Ub<Arch::Ascend950, Gemm::GemmType<Element, layout::VectorLayout>> {
+    using LayoutSrc = layout::VectorLayout;
+    using LayoutDst = layout::VectorLayout;
+    static constexpr uint32_t ELE_NUM_PER_BLK = BYTE_PER_BLK / sizeof(Element);
+
+    CATLASS_DEVICE
+    CopyGm2Ub() = default;
+
+    CATLASS_DEVICE
+    void operator()(
+        AscendC::LocalTensor<Element> const &dstTensor,
+        AscendC::GlobalTensor<Element> const &srcTensor,
+        layout::VectorLayout const &layoutDst,
+        layout::VectorLayout const &layoutSrc)
+    {
+        AscendC::DataCopyExtParams dataCopyParams(
+            1,
+            layoutSrc.shape(0) * sizeof(Element),
+            0,
+            0,
+            0
+        );
+        AscendC::DataCopyPadExtParams<Element> padParams(false, 0, 0, 0);
+        AscendC::DataCopyPad(dstTensor, srcTensor, dataCopyParams, padParams);
     };
 };
 

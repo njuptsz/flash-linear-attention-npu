@@ -1,9 +1,11 @@
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 import argparse
@@ -35,6 +37,8 @@ class OpGenerator:
         self._replace_content()
         logging.info(f"成功为 {self.op_type}/{self.op_name} 创建算子工程！")
         logging.info(f"工程路径: {self.dest_dir}")
+        logging.info(f"Create the initial directory for {self.op_name} under {self.op_type} success")
+        
 
     def _validate_inputs(self):
         """校验输入参数的有效性和安全性"""
@@ -58,6 +62,10 @@ class OpGenerator:
         
         try:
             shutil.copytree(self.template_dir, self.dest_dir)
+            if not os.path.isfile(os.path.join(os.path.dirname(self.dest_dir), "CMakeLists.txt")):
+                cmake_src = os.path.join(os.path.dirname(self.template_dir), "CMakeLists.txt")
+                cmake_dest = os.path.join(os.path.dirname(self.dest_dir), "CMakeLists.txt")
+                shutil.copy2(cmake_src, cmake_dest)
         except OSError as e:
             raise OSError(f"复制模板文件失败: {e}") from e
 

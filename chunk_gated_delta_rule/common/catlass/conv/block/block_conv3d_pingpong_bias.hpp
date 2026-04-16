@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_CONV_BLOCK_BLOCK_CONV3D_PINGPONG_BIAS_HPP
@@ -371,6 +372,8 @@ protected:
 
         uint32_t hwStartPos = 0;
         uint32_t diStartPos = 0;
+        uint32_t hiLoadL1 = 0;
+        uint8_t padList[PAD_SIZE] = {0};
 
         uint32_t orgCoAlignK0 = 0;
         uint32_t orgCoAlignN0 = 0;
@@ -700,27 +703,27 @@ protected:
         iterParams.aL1IsFullPad = false;
         bool set2dFlagDHead = false;
         bool set2dFlagDTail = false;
-        uint32_t hiLoadL1 = orgHiLoadL1;
+        iterParams.hiLoadL1 = orgHiLoadL1;
         uint32_t cin1LoadL1 = orgCin1LoadL1;
 
         uint32_t hiStartIdxWithPad = hoStartIdx * conv3dParams.sH();
-        uint32_t hiEndIdxWithPad = hiStartIdxWithPad + hiLoadL1;
+        uint32_t hiEndIdxWithPad = hiStartIdxWithPad + iterParams.hiLoadL1;
         uint32_t hiIdx = hiStartIdxWithPad - conv3dParams.padtop() - curCoreHiStartIdx;
         uint32_t hiWithPad = conv3dParams.hi() + conv3dParams.padtop();
         if (hiEndIdxWithPad <= conv3dParams.padtop()) {
             iterParams.aL1IsFullPad = true;
         } else if (hiStartIdxWithPad < conv3dParams.padtop()) {
             hiIdx = 0;
-            hiLoadL1 = hiLoadL1 + hiStartIdxWithPad - conv3dParams.padtop();
+            iterParams.hiLoadL1 = iterParams.hiLoadL1 + hiStartIdxWithPad - conv3dParams.padtop();
             padTopL1 = conv3dParams.padtop() - hiStartIdxWithPad;
             if (hiEndIdxWithPad >= hiWithPad) {
-                hiLoadL1 = conv3dParams.hi() - hiIdx;
+                iterParams.hiLoadL1 = conv3dParams.hi() - hiIdx;
                 padBottomL1 = hiEndIdxWithPad - hiWithPad;
             }
         } else if (hiStartIdxWithPad >= hiWithPad) {
             iterParams.aL1IsFullPad = true;
         } else if (hiEndIdxWithPad > hiWithPad) {
-            hiLoadL1 = hiWithPad - hiStartIdxWithPad;
+            iterParams.hiLoadL1 = hiWithPad - hiStartIdxWithPad;
             padBottomL1 = hiEndIdxWithPad - hiWithPad;
         }
 
@@ -757,37 +760,35 @@ protected:
             cin1LoadL1 = kdTmp * conv3dParams.cin1();
         }
         if (!iterParams.aL1IsFullPad) {
-            uint8_t padList[PAD_SIZE] = {0};
-            padList[PAD_IDX_L] = conv3dParams.padleft();
-            padList[PAD_IDX_R] = conv3dParams.padright();
-            padList[PAD_IDX_T] = padTopL1;
-            padList[PAD_IDX_B] = padBottomL1;
-            SetFmatrix(hiLoadL1, conv3dParams.wi(), padList, AscendC::FmatrixMode::FMATRIX_LEFT);
+            iterParams.padList[PAD_IDX_L] = conv3dParams.padleft();
+            iterParams.padList[PAD_IDX_R] = conv3dParams.padright();
+            iterParams.padList[PAD_IDX_T] = padTopL1;
+            iterParams.padList[PAD_IDX_B] = padBottomL1;
 
             uint64_t aL1Offset = 0;
             if (set2dFlagDHead) {
                 AscendC::InitConstValueParams<ElementFmap> initConstValueParams;
                 initConstValueParams.repeatTimes = cin1LoadL1PadHead / conv3dParams.cin1();
-                initConstValueParams.blockNum = conv3dParams.cin1() * hiLoadL1 * conv3dParams.wi();
+                initConstValueParams.blockNum = conv3dParams.cin1() * iterParams.hiLoadL1 * conv3dParams.wi();
                 initConstValueParams.dstGap = 0;
                 initConstValueParams.initValue = 0;
                 InitConstValue(l1ATensorList[l1ListId], initConstValueParams);
-                aL1Offset += cin1LoadL1PadHead * hiLoadL1 * conv3dParams.wicin0();
+                aL1Offset += cin1LoadL1PadHead * iterParams.hiLoadL1 * conv3dParams.wicin0();
                 set2dFlagDHead = false;
             }
 
             Conv3d6HdCoord gmTileFmapOffset{0, diIdx, cin1L1Idx, hiIdx * conv3dParams.wi()};
             auto layoutTileFmap = layoutFmap.GetTileLayout(MakeCoord((uint32_t)1, conv3dParams.dD(), conv3dParams.cin1(), conv3dParams.hi(), conv3dParams.wi(), conv3dParams.cin0()));
             auto gmTileFmap = gmBatchFmap[layoutTileFmap.GetOffset(gmTileFmapOffset)];
-            layoutFmapInL1 = LayoutFmapInL1::MakeLayout(1, 1, cin1LoadL1, hiLoadL1, conv3dParams.wi() ,conv3dParams.cin0());
+            layoutFmapInL1 = LayoutFmapInL1::MakeLayout(1, 1, cin1LoadL1, iterParams.hiLoadL1, conv3dParams.wi() ,conv3dParams.cin0());
 
             copyGmToL1A(l1ATensorList[l1ListId][aL1Offset], gmTileFmap, layoutFmapInL1, layoutTileFmap);
 
             if (set2dFlagDTail) {
-                aL1Offset += cin1LoadL1 * hiLoadL1 * conv3dParams.wi()* conv3dParams.cin0();
+                aL1Offset += cin1LoadL1 * iterParams.hiLoadL1 * conv3dParams.wi()* conv3dParams.cin0();
                 AscendC::InitConstValueParams<ElementFmap> initConstValueParams;
                 initConstValueParams.repeatTimes = cin1LoadL1PadTail / conv3dParams.cin1();
-                initConstValueParams.blockNum = conv3dParams.cin1() * hiLoadL1 * conv3dParams.wi();
+                initConstValueParams.blockNum = conv3dParams.cin1() * iterParams.hiLoadL1 * conv3dParams.wi();
                 initConstValueParams.dstGap = 0;
                 initConstValueParams.initValue = 0;
                 InitConstValue(l1ATensorList[l1ListId][aL1Offset], initConstValueParams);
@@ -828,7 +829,7 @@ protected:
                 iterParams.mAL0Iter * L0TileShape::mL0 + iterParams.hwStartPos % conv3dParams.wo() :
                 iterParams.mAL0Iter * L0TileShape::mL0 + (iterParams.hwStartPos + iterParams.mAL1Iter * FmapL1TileShape::mAL1) % conv3dParams.wo();
             LayoutAInL0 layoutAInL0 = LayoutAInL0::template MakeLayout<ElementFilter>(tileParams.l0CurrentM, currentKL0);
-            copyL1ToL0A(l0ATile, l1ATensorList[l1aListId], layoutAInL0, layoutFmapInL1, kStartPt, mStartPt);
+            copyL1ToL0A(l0ATile, l1ATensorList[l1aListId], layoutAInL0, layoutFmapInL1, kStartPt, mStartPt, iterParams.hiLoadL1, conv3dParams.wi(), iterParams.padList);
         }
         iterParams.kBL0Iter = iterParams.kIter % iterParams.multiKBL1;
         uint32_t tilingNBSrc_ = (iterParams.nBL1Iter != iterParams.maxNBL1Iter) ? FilterL1TileShape::nBL1 : iterParams.nBL1TailAlign;

@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_EPILOGUE_DISPATCH_POLICY_HPP
@@ -53,6 +54,18 @@ struct EpilogueAtlasA2RescaleO {
     using ArchTag = Arch::AtlasA2;
 };
 
+// For Ascend950, FA Infer online Softmax
+template <bool ATTENTION_MASK_FLAG_ = false>
+struct EpilogueAscend950FASoftmax {
+    using ArchTag = Arch::Ascend950;
+    static constexpr bool ATTENTION_MASK_FLAG = ATTENTION_MASK_FLAG_;
+};
+
+// For Ascend950, FA Infer RescaleO
+struct EpilogueAscend950FARescaleO {
+    using ArchTag = Arch::Ascend950;
+};
+
 // For AtlasA2, MLA RescaleO
 struct EpilogueAtlasA2MLARescaleO {
     using ArchTag = Arch::AtlasA2;
@@ -84,6 +97,24 @@ struct EpilogueAtlasA2PerTokenDequant {
     static constexpr uint32_t UB_STAGES = UB_STAGES_;
 };
 
+// For AtlasA2, per token dequant tla version
+template <uint32_t UB_STAGES_>
+struct EpilogueAtlasA2PerTokenDequantTla {
+    using ArchTag = Arch::AtlasA2;
+    static constexpr uint32_t UB_STAGES = UB_STAGES_;
+};
+
+// For Ascend950, per token dequant
+template <uint32_t UB_STAGES_>
+struct EpilogueAscend950PerTokenDequantTla {
+    using ArchTag = Arch::Ascend950;
+    static constexpr uint32_t UB_STAGES = UB_STAGES_;
+};
+
+// For Ascend950, perGroup + perBlock dequant
+struct BlockEpiloguePertile{
+    using ArchTag = Arch::Ascend950;
+};
 
 // For AtlasA2, W4A4 epilogue process
 struct EpilogueAtlasA2W4A4PerTokenPerChannelDequant {
@@ -100,25 +131,13 @@ struct EpilogueAtlasA2Gemm {
 struct EpilogueAtlasA2Gemv {
     using ArchTag = Arch::AtlasA2;
 };
-
-struct EpilogueAtlasA2GDNFwdHVnew {
-    using ArchTag = Arch::AtlasA2;
-};
-
-struct EpilogueAtlasA2GDNFwdHUpdate {
-    using ArchTag = Arch::AtlasA2;
-};
-
-// For AtlasA2, GDN FwdO QKmask
-struct EpilogueAtlasA2GDNFwdOQkmask {
-    using ArchTag = Arch::AtlasA2;
-};
-
-// For AtlasA2, GDN FwdO Output
-struct EpilogueAtlasA2GDNFwdOOutput {
-    using ArchTag = Arch::AtlasA2;
-};
 ///////////////////////////
+// For Ascend950, fixpipe-opti
+template <bool SPLIT_M_>
+struct EpilogueAscend950Fixpipe {
+    using ArchTag = Arch::Ascend950;
+    static constexpr bool SPLIT_M = SPLIT_M_;
+};
 }  // namespace Catlass::Epilogue
 
 #endif  // CATLASS_EPILOGUE_DISPATCH_POLICY_HPP

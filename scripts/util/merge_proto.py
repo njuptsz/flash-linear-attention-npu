@@ -3,9 +3,11 @@
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 import os
@@ -18,7 +20,7 @@ def match_op_proto(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    op_def_pattern = re.compile(r"REG_OP\((.+)\).*OP_END_FACTORY_REG\(\1\)\;", re.DOTALL)
+    op_def_pattern = re.compile(r"REG_OP\((.+)\).*OP_END_FACTORY_REG\(\1\)", re.DOTALL)
     match = op_def_pattern.search(content)
 
     if match:
@@ -27,7 +29,7 @@ def match_op_proto(file_path):
         return op_name, op_def
     else:
         return None, None
-    
+
 
 def merge_op_proto(protos_path, output_file):
     op_defs = []

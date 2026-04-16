@@ -1,9 +1,11 @@
 # ----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------------------------------------
 include(ExternalProject)
 set(PROTOBUF_VERSION_PKG protobuf-25.1.tar.gz)
@@ -31,9 +33,16 @@ else()
     if(EXISTS "${CANN_3RD_LIB_PATH}/protobuf/protobuf-all-25.1.tar.gz")
         set(REQ_URL "file://${CANN_3RD_LIB_PATH}/protobuf/protobuf-all-25.1.tar.gz")
         message(STATUS "[ThirdPartyLib][ascend protobuf] found in ${REQ_URL}.")
+    elseif(EXISTS ${CANN_3RD_LIB_PATH}/protobuf/protobuf-25.1.tar.gz)
+ 	    set(REQ_URL "${CANN_3RD_LIB_PATH}/protobuf/protobuf-25.1.tar.gz")
+        message(STATUS "[ThirdPartyLib][ascend protobuf] found in ${REQ_URL}.")
     elseif(EXISTS "${CANN_3RD_LIB_PATH}/pkg/${PROTOBUF_VERSION_PKG}")
         set(REQ_URL "file://${CANN_3RD_LIB_PATH}/pkg/${PROTOBUF_VERSION_PKG}")
         message(STATUS "[ThirdPartyLib][ascend protobuf] found in ${REQ_URL}.")
+    elseif(EXISTS "${CANN_3RD_LIB_PATH}/${PROTOBUF_VERSION_PKG}")
+        message(STATUS "Found protobuf archive in ${CANN_3RD_LIB_PATH}, moving to pkg")
+        file(MAKE_DIRECTORY ${CANN_3RD_LIB_PATH}/pkg)
+        file(RENAME "${CANN_3RD_LIB_PATH}/${PROTOBUF_VERSION_PKG}" "${CANN_3RD_LIB_PATH}/pkg/${PROTOBUF_VERSION_PKG}")
     else()
         set(REQ_URL "https://gitcode.com/cann-src-third-party/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz")
         message(STATUS "[ThirdPartyLib][ascend protobuf] ${REQ_URL} not found, need download.")

@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_EPILOGUE_TILE_TILE_COPY_HPP
@@ -12,8 +13,16 @@
 
 #include "catlass/catlass.hpp"
 #include "catlass/arch/arch.hpp"
+#include "catlass/detail/tag_to_layout.hpp"
 #include "catlass/epilogue/tile/copy_gm_to_ub.hpp"
 #include "catlass/epilogue/tile/copy_ub_to_gm.hpp"
+#include "catlass/epilogue/tile/copy_gm_to_ub_tla.hpp"
+#include "catlass/epilogue/tile/copy_ub_to_gm_tla.hpp"
+#include "tla/tensor.hpp"
+
+#if (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
+#include "catlass/epilogue/tile/copy_ub_to_l1_tla.hpp"
+#endif
 
 namespace Catlass::Epilogue::Tile {
 
@@ -132,6 +141,60 @@ struct TileCopyW4A4Gemm {
     using CopyGmToUbPerTokenScale = CopyGm2Ub<ArchTag, PerTokenScaleType>;
     using CopyUbToGmD = CopyUb2Gm<ArchTag, DType>;
 };
+
+template <
+    class ArchTag,
+    /// GemmType for C matrix operand
+    class ElementC_,
+    class LayoutTagC_,
+    /// GemmType for X matrix operand
+    class ElementX_,
+    class LayoutTagX_,
+    /// GemmType for Y matrix operand
+    class ElementY_,
+    class LayoutTagY_,
+    /// GemmType for D matrix operand
+    class ElementD_,
+    class LayoutTagD_
+>
+struct TileCopyDequantTla {
+    using ElementC = ElementC_;
+    using LayoutTagC = LayoutTagC_;
+    using LayoutC = detail::TagToLayout_t<ElementC, LayoutTagC>;
+    using TensorUbC =
+        tla::Tensor<AscendC::LocalTensor<ElementC>, LayoutC, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+
+    using ElementX = ElementX_;
+    using LayoutTagX = LayoutTagX_;
+    using LayoutX = detail::TagToLayout_t<ElementX, LayoutTagX>;
+    using TensorUbX =
+        tla::Tensor<AscendC::LocalTensor<ElementX>, LayoutX, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+
+    using ElementY = ElementY_;
+    using LayoutTagY = LayoutTagY_;
+    using LayoutY = detail::TagToLayout_t<ElementY, LayoutTagY>;
+    using TensorUbY =
+        tla::Tensor<AscendC::LocalTensor<ElementY>, LayoutY, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+
+    using ElementD = ElementD_;
+    using LayoutTagD = LayoutTagD_;
+    using LayoutD = detail::TagToLayout_t<ElementD, LayoutTagD>;
+    using TensorUbD =
+        tla::Tensor<AscendC::LocalTensor<ElementD>, LayoutD, tla::Coord<tla::_0, tla::_0>, AscendC::TPosition::VECCALC>;
+
+    template <class TensorC>
+    using CopyGmToUbC = CopyGm2UbTla<ArchTag, TensorC, TensorUbC>;
+
+    template <class TensorX>
+    using CopyGmToUbX = CopyGm2UbTla<ArchTag, TensorX, TensorUbX>;
+
+    template <class TensorY>
+    using CopyGmToUbY = CopyGm2UbTla<ArchTag, TensorY, TensorUbY>;
+
+    template <class TensorD>
+    using CopyUbToGmD = CopyUb2GmTla<ArchTag, TensorUbD, TensorD>;
+};
+
 } // namespace Catlass::Epilogue::Tile
 
 #endif  // CATLASS_EPILOGUE_TILE_TILE_COPY_HPP

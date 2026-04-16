@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_CATLASS_HPP
@@ -36,10 +37,13 @@ constexpr uint32_t STRIDE_LIMIT = 65536;
 
 constexpr uint32_t BYTE_PER_BLK_FP = 128;  /// datablock size of A1->C2PiPE2GM
 
-} // namespace Catlass
+class EmptyClass {};
 
-#if defined(__CCE__) && defined(L2_CACHE_HINT) && defined(CATLASS_BUILD_LEGACY)
-inline __gm__ struct OpSystemRunCfg g_opSystemRunCfg{Catlass::L2_OFFSET};
+#if (defined(CATLASS_ARCH) && CATLASS_ARCH == 3510)
+constexpr uint32_t MX_SCALE_COPY_GROUP_NUM = 2;        // Mx-scale matrix 2-byte aligned
+constexpr uint32_t MX_SCALE_GROUP_NUM = 32;            // Data count for one MX-scale factor per group
+constexpr uint32_t MX_BASEK_FACTOR = 64;               // Data matrix alignment at K-dimension
 #endif
+} // namespace Catlass
 
 #endif // CATLASS_CATLASS_HPP

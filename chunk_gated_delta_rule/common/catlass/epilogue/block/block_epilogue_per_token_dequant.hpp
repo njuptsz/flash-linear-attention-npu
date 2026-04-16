@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_EPILOGUE_BLOCK_EPILOGUE_PER_TOKEN_DEQUANT_HPP
@@ -194,16 +195,47 @@ public:
         LayoutC const &layoutBlockC, Callback &&callback = Callback{}
     )
     {
-        if (actualBlockShapeMNK.k() == 0) {
-            return;
-        }
-        callback();
-
-        // Calculate the offset of the current block
         MatrixCoord blockShape = blockShapeMNK.GetCoordMN();
         MatrixCoord blockCoord = blockCoordMNK.GetCoordMN();
         MatrixCoord actualBlockShape = actualBlockShapeMNK.GetCoordMN();
         MatrixCoord blockOffset = blockCoord * blockShape;
+
+        auto ubTileStride = MakeCoord(static_cast<int64_t>(TileShape::COLUMN), 1L);
+        auto tileShape = TileShape::ToCoord();
+        EpilogueTileSwizzle epilogueTileSwizzle(actualBlockShape, tileShape);
+        uint32_t tileLoops = epilogueTileSwizzle.GetLoops();
+        uint32_t subblockIdx = AscendC::GetSubBlockIdx();
+        uint32_t subblockNum = AscendC::GetSubBlockNum();
+
+        if (actualBlockShapeMNK.k() == 0) {
+            AscendC::GlobalTensor<ElementD> gmD;
+            gmD.SetGlobalBuffer(params.ptrD);
+
+            ElementD zeroD{};
+            for (uint32_t loopIdx = subblockIdx; loopIdx < tileLoops; loopIdx += subblockNum) {
+                auto tileCoord = epilogueTileSwizzle.GetTileCoord(loopIdx);
+                auto actualTileShape = epilogueTileSwizzle.GetActualTileShape(tileCoord);
+                auto tileOffset = blockOffset + tileCoord * tileShape;
+
+                auto &ubD = ubDList[ubListId];
+                LayoutD layoutUbD{actualTileShape, ubTileStride};
+
+                AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
+                AscendC::Duplicate<ElementD>(ubD, zeroD, TileShape::COUNT);
+                AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
+
+                auto gmTileD = gmD[params.layoutD.GetOffset(tileOffset)];
+                auto layoutGmTileD = params.layoutD.GetTileLayout(actualTileShape);
+
+                AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
+                copyUbToGmD(gmTileD, ubD, layoutGmTileD, layoutUbD);
+                AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
+
+                ubListId = (ubListId + 1 < UB_STAGES) ? (ubListId + 1) : 0;
+            }
+            return;
+        }
+        callback();
 
         AscendC::GlobalTensor<ElementScale> gmScale;
         gmScale.SetGlobalBuffer(params.ptrScale);
@@ -212,12 +244,6 @@ public:
         AscendC::GlobalTensor<ElementD> gmD;
         gmD.SetGlobalBuffer(params.ptrD);
 
-        auto ubTileStride = MakeCoord(static_cast<int64_t>(TileShape::COLUMN), 1L);
-        auto tileShape = TileShape::ToCoord();
-        EpilogueTileSwizzle epilogueTileSwizzle(actualBlockShape, tileShape);
-        uint32_t tileLoops = epilogueTileSwizzle.GetLoops();
-        uint32_t subblockIdx = AscendC::GetSubBlockIdx();
-        uint32_t subblockNum = AscendC::GetSubBlockNum();
         for (uint32_t loopIdx = subblockIdx; loopIdx < tileLoops; loopIdx += subblockNum) {
             auto tileCoord = epilogueTileSwizzle.GetTileCoord(loopIdx);
             auto actualTileShape = epilogueTileSwizzle.GetActualTileShape(tileCoord);
@@ -503,15 +529,47 @@ public:
         LayoutC const &layoutBlockC, Callback &&callback = Callback{}
     )
     {
-        if (actualBlockShapeMNK.k() == 0) {
-            return;
-        }
-        callback();
-        // Calculate the offset of the current block
         MatrixCoord blockShape = blockShapeMNK.GetCoordMN();
         MatrixCoord blockCoord = blockCoordMNK.GetCoordMN();
         MatrixCoord actualBlockShape = actualBlockShapeMNK.GetCoordMN();
         MatrixCoord blockOffset = blockCoord * blockShape;
+
+        auto ubTileStride = MakeCoord(static_cast<int64_t>(TileShape::COLUMN), 1L);
+        auto tileShape = TileShape::ToCoord();
+        EpilogueTileSwizzle epilogueTileSwizzle(actualBlockShape, tileShape);
+        uint32_t tileLoops = epilogueTileSwizzle.GetLoops();
+        uint32_t subblockIdx = AscendC::GetSubBlockIdx();
+        uint32_t subblockNum = AscendC::GetSubBlockNum();
+
+        if (actualBlockShapeMNK.k() == 0) {
+            AscendC::GlobalTensor<ElementD> gmD;
+            gmD.SetGlobalBuffer(params.ptrD);
+
+            ElementD zeroD{};
+            for (uint32_t loopIdx = subblockIdx; loopIdx < tileLoops; loopIdx += subblockNum) {
+                auto tileCoord = epilogueTileSwizzle.GetTileCoord(loopIdx);
+                auto actualTileShape = epilogueTileSwizzle.GetActualTileShape(tileCoord);
+                auto tileOffset = blockOffset + tileCoord * tileShape;
+
+                auto &ubD = ubDList[ubListId];
+                LayoutD layoutUbD{actualTileShape, ubTileStride};
+
+                AscendC::WaitFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
+                AscendC::Duplicate<ElementD>(ubD, zeroD, TileShape::COUNT);
+                AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
+
+                auto gmTileD = gmD[params.layoutD.GetOffset(tileOffset)];
+                auto layoutGmTileD = params.layoutD.GetTileLayout(actualTileShape);
+
+                AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(eventUbDVMTE3List[ubListId]);
+                copyUbToGmD(gmTileD, ubD, layoutGmTileD, layoutUbD);
+                AscendC::SetFlag<AscendC::HardEvent::MTE3_V>(eventUbDMTE3VList[ubListId]);
+
+                ubListId = (ubListId + 1 < UB_STAGES) ? (ubListId + 1) : 0;
+            }
+            return;
+        }
+        callback();
 
         AscendC::GlobalTensor<ElementScale> gmScale;
         gmScale.SetGlobalBuffer(params.ptrScale);
@@ -520,12 +578,6 @@ public:
         AscendC::GlobalTensor<ElementD> gmD;
         gmD.SetGlobalBuffer(params.ptrD);
 
-        auto ubTileStride = MakeCoord(static_cast<int64_t>(TileShape::COLUMN), 1L);
-        auto tileShape = TileShape::ToCoord();
-        EpilogueTileSwizzle epilogueTileSwizzle(actualBlockShape, tileShape);
-        uint32_t tileLoops = epilogueTileSwizzle.GetLoops();
-        uint32_t subblockIdx = AscendC::GetSubBlockIdx();
-        uint32_t subblockNum = AscendC::GetSubBlockNum();
         for (uint32_t loopIdx = subblockIdx; loopIdx < tileLoops; loopIdx += subblockNum) {
             auto tileCoord = epilogueTileSwizzle.GetTileCoord(loopIdx);
             auto actualTileShape = epilogueTileSwizzle.GetActualTileShape(tileCoord);

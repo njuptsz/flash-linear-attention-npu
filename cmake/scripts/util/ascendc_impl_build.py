@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # coding: utf-8
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 import argparse
@@ -25,7 +27,7 @@ PYF_PATH = os.path.dirname(os.path.realpath(__file__))
 IMPL_HEAD = '''#!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 """
-Copyright (c) Tianjin University, Ltd. {}-{}. All rights reserved.
+Copyright (c) Huawei Technologies Co., Ltd. {}-{}. All rights reserved.
 """
 
 import re
@@ -33,14 +35,16 @@ import os, sys
 import ctypes
 import json
 import shutil
-from tbe.common.platform import get_soc_spec
-from tbe.common.utils import para_check
-from tbe.tikcpp import compile_op, replay_op, check_op_cap, generalize_op_params, get_code_channel, OpInfo
-from tbe.tikcpp.compile_op import CommonUtility, AscendCLogLevel
-from tbe.common.buildcfg import get_default_build_config
-from tbe.common.buildcfg import get_current_build_config
-import tbe.common.register as tbe_register
+from asc_op_compile_base.common.platform import get_soc_spec
+from asc_op_compile_base.common.utils import para_check
+from asc_op_compile_base.asc_op_compiler import compile_op, replay_op, check_op_cap, generalize_op_params, get_code_channel, OpInfo
+from asc_op_compile_base.asc_op_compiler.compile_op import CommonUtility, AscendCLogLevel
+from asc_op_compile_base.common.buildcfg import get_default_build_config
+from asc_op_compile_base.common.buildcfg import get_current_build_config
+from asc_op_compile_base.common import register as tbe_register
 PYF_PATH = os.path.dirname(os.path.realpath(__file__))
+
+__version__ = '2.0.0'
 
 DTYPE_MAP = {{"float32": ["DT_FLOAT", "float"],
     "float16": ["DT_FLOAT16", "half"],

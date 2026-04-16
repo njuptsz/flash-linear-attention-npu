@@ -1,24 +1,36 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_DEBUG_HPP
 #define CATLASS_DEBUG_HPP
 
+#include <functional>
 #include <iostream>
 #include <sstream>
-#include <functional>
 
 #include <acl/acl.h>
 
 #define SINGLE_CORE_DUMPSIZE (1024 * 1024)
-// 75 is from AscendC host stub
-#define ALL_DUMPSIZE (75 * SINGLE_CORE_DUMPSIZE)
+#ifdef CATLASS_ARCH
+#if CATLASS_ARCH == 2201
+#define DUMP_CORE_NUM 75
+#endif
+#if CATLASS_ARCH == 3510
+#define DUMP_CORE_NUM 108
+#endif
+#endif
+#ifndef DUMP_CORE_NUM
+#define DUMP_CORE_NUM 0
+#endif
+// DUMP_CORE_NUM is from AscendC host stub
+#define ALL_DUMPSIZE (DUMP_CORE_NUM * SINGLE_CORE_DUMPSIZE)
 
 using LogFuncType = std::function<void(const char *)>;
 /**
@@ -27,7 +39,10 @@ using LogFuncType = std::function<void(const char *)>;
  * @param logFunc Log function, which receives a C-Style string.
  * @return
  */
-inline void aclCheck(aclError status, LogFuncType logFunc = [](const char *logStrPtr) { std::cerr << logStrPtr; })
+inline void aclCheck(
+    aclError status,
+    LogFuncType logFunc = [](const char *logStrPtr) { std::cerr << logStrPtr; }
+)
 {
     if (status != ACL_SUCCESS) {
         std::stringstream ss;
@@ -41,7 +56,10 @@ inline void aclCheck(aclError status, LogFuncType logFunc = [](const char *logSt
  * @param logFunc Log function, which receives a C-Style string.
  * @return
  */
-inline void rtCheck(int status, LogFuncType logFunc = [](const char *logStrPtr) { std::cerr << logStrPtr; })
+inline void rtCheck(
+    int status,
+    LogFuncType logFunc = [](const char *logStrPtr) { std::cerr << logStrPtr; }
+)
 {
     if (status != 0) {
         std::stringstream ss;
@@ -51,10 +69,7 @@ inline void rtCheck(int status, LogFuncType logFunc = [](const char *logStrPtr) 
 }
 
 namespace Adx {
-void AdumpPrintWorkSpace(const void *dumpBufferAddr,
-                         const size_t dumpBufferSize,
-                         aclrtStream stream,
-                         const char *opType);
+void AdumpPrintWorkSpace(const void *dumpBufferAddr, const size_t dumpBufferSize, aclrtStream stream, const char *opType);
 } // namespace Adx
 
 #endif // CATLASS_DEBUG_HPP

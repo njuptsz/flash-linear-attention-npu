@@ -2,9 +2,11 @@
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 ## module log
@@ -274,44 +276,6 @@ comm_get_install_param() {
     eval "${_outvar}=\"${_result}\""
 }
 
-# 解析安装参数选项
-__parse_install_options() {
-    local -n install_path_param_ref="$1"
-    local -n install_type_ref="$2"
-    local -n username_ref="$3"
-    local -n usergroup_ref="$4"
-    local -n feature_type_ref="$5"
-
-    while true
-    do
-        case "$1" in
-        --install-path-param=*)
-            install_path_param_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        --install-type=*)
-            install_type_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        --username=*)
-            username_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        --usergroup=*)
-            usergroup_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        --feature-type=*)
-            feature_type_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        *)
-            break
-            ;;
-        esac
-    done
-}
-
 # 更新安装参数文件
 comm_update_install_info() {
     local install_path_param=""
@@ -321,7 +285,34 @@ comm_update_install_info() {
     local feature_type=""
     local package install_info
 
-    __parse_install_options "install_path_param" "install_type" "username" "usergroup" "feature_type"
+    while true
+    do
+        case "$1" in
+        --install-path-param=*)
+            install_path_param="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        --install-type=*)
+            install_type="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        --username=*)
+            username="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        --usergroup=*)
+            usergroup="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        --feature-type=*)
+            feature_type="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        *)
+            break
+            ;;
+        esac
+    done
 
     if [ $# -lt 2 ]; then
         return 1
@@ -566,11 +557,11 @@ check_pkg_ver_deps() {
 check_install_path_valid() {
     local install_path="$1"
     # 黑名单设置，不允许//，...这样的路径
-    if echo "${install_path}" | grep -Eq '\/{2,}|\.{3,}'; then
+    if echo "${install_path}" | grep -Eq '/{2,}|\.{3,}'; then
         return 1
     fi
     # 白名单设置，只允许常见字符
-    if echo "${install_path}" | grep -Eq '^\~?[a-zA-Z0-9./_-]*$'; then
+    if echo "${install_path}" | grep -Eq '^~?[a-zA-Z0-9./_-]*$'; then
         return 0
     else
         return 1
@@ -919,78 +910,6 @@ get_titled_package_name() {
     _package_to_log_pkg_name "$@"
 }
 
-# 解析预安装参数选项
-__parse_preinstall_options() {
-    local -n install_path_ref="$1"
-    local -n docker_root_ref="$2"
-    local -n script_dir_ref="$3"
-    local -n package_ref="$4"
-    local -n logfile_ref="$5"
-    local -n logstyle_ref="$6"
-
-    # 参数列表末尾添加--参数
-    eval set -- "$@ --"
-
-    while true
-    do
-        case "$1" in
-        --install-path=*)
-            install_path_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        --docker-root=*)
-            docker_root_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        --script-dir=*)
-            script_dir_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        --package=*)
-            package_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        --logfile=*)
-            logfile_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        --logstyle=*)
-            logstyle_ref="$(echo "$1" | cut -d"=" -f2-)"
-            shift
-            ;;
-        *)
-            break
-            ;;
-        esac
-    done
-}
-
-# 验证预安装必需参数
-__validate_preinstall_params() {
-    local install_path="$1"
-    local script_dir="$2"
-    local package="$3"
-    local logfile="$4"
-
-    if [ "${install_path}" = "" ]; then
-        echo "error: install_path is needed!"
-        return 1
-    fi
-    if [ "${script_dir}" = "" ]; then
-        echo "error: script_dir is needed!"
-        return 1
-    fi
-
-    if [ "${package}" = "" ]; then
-        echo "error: package is needed!"
-        return 1
-    fi
-    if [ "${logfile}" = "" ]; then
-        echo "error: logfile is needed!"
-        return 1
-    fi
-}
-
 # 安装前处理。
 # 返回码：
 # 0: 成功
@@ -1014,9 +933,59 @@ preinstall_process() {
     local version_info_path
     local ret
 
-    __parse_preinstall_options "install_path" "docker_root" "script_dir" "package" "logfile" "LOG_STYLE"
+    # 参数列表末尾添加--参数
+    eval set -- "$@ --"
 
-    __validate_preinstall_params "$install_path" "$script_dir" "$package" "$logfile" || return 1
+    while true
+    do
+        case "$1" in
+        --install-path=*)
+            install_path="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        --docker-root=*)
+            docker_root="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        --script-dir=*)
+            script_dir="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        --package=*)
+            package="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        --logfile=*)
+            logfile="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        --logstyle=*)
+            LOG_STYLE="$(echo "$1" | cut -d"=" -f2-)"
+            shift
+            ;;
+        *)
+            break
+            ;;
+        esac
+    done
+
+    if [ "${install_path}" = "" ]; then
+        echo "error: install_path is needed!"
+        return 1
+    fi
+    if [ "${script_dir}" = "" ]; then
+        echo "error: script_dir is needed!"
+        return 1
+    fi
+
+    if [ "${package}" = "" ]; then
+        echo "error: package is needed!"
+        return 1
+    fi
+    if [ "${logfile}" = "" ]; then
+        echo "error: logfile is needed!"
+        return 1
+    fi
 
     LOG_FILE="${logfile}"
     _package_to_log_pkg_name "LOG_PKG_NAME" "${package}"
@@ -1072,7 +1041,7 @@ is_multi_version_pkg() {
 _filelist_column() {
     local _filepath="$1"
     local _idx="$2"
-    tail -n +2 "$_filepath" | cut -d, -f${_idx} | sort | uniq
+    tail -n +2 "$_filepath" | grep -v '^#' | cut -d, -f${_idx} | sort | uniq
 }
 
 # 移除comm特性

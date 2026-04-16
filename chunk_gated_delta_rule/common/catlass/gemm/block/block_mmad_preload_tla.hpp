@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_GEMM_BLOCK_BLOCK_MMAD_PRELOAD_TLA_HPP
@@ -13,6 +14,7 @@
 #include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
 #include "catlass/coord.hpp"
+#include "catlass/detail/callback.hpp"
 #include "catlass/gemm_coord.hpp"
 #include "catlass/gemm/dispatch_policy.hpp"
 #include "catlass/gemm/helper.hpp"
@@ -174,7 +176,8 @@ public:
     CATLASS_DEVICE
     void operator()(
         TensorA &tensorA, TensorB &tensorB, TensorC &tensorC, TensorA &tensorNextA, TensorB &tensorNextB,
-        GemmCoord const &actualShape, GemmCoord const &actualShapeNext, bool isFirstBlock, bool hasNextBlock)
+        GemmCoord const &actualShape, GemmCoord const &actualShapeNext, bool isFirstBlock, bool hasNextBlock,
+        Callback const &callbackBeforeFixpipe = {}, Callback const &callbackAfterFixpipe = {})
     {
         uint32_t mBlockActual = actualShape.m();
         uint32_t kBlockActual = actualShape.k();
@@ -401,6 +404,7 @@ public:
             kActual = kActualNext;
         }
 
+        callbackBeforeFixpipe();
         // copy block out
         if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);
@@ -410,6 +414,7 @@ public:
         } else {
             copyL0CToGm(tensorC, tensorL0C, 0b11);
         }
+        callbackAfterFixpipe();
     }
 
 protected:

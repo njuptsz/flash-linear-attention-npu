@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_COORD_HPP
@@ -49,54 +50,33 @@ public:
         }
     }
 
-    // Constructs frrom an array of integers
     CATLASS_HOST_DEVICE
     int Argmin() const
     {
-        int i = 0;
-        for (int j = 1; j < RANK; ++j) {
-            if (idx[j] < idx[i]) {
-                i = j;
-            }
-        }
-        return i;
+        return ArgminImpl<1>(0);
     }
+    
 
     // Returns the index of the dimension with greatest value
     CATLASS_HOST_DEVICE
     int Argmax() const
     {
-        int i = 0;
-        for (int j = 1; j < RANK; ++j) {
-            if (idx[j] > idx[i]) {
-                i = j;
-            }
-        }
-        return i;
+        return ArgmaxImpl<1>(0);
     }
+    
 
     // Returns true if Coord is non-zero
     CATLASS_HOST_DEVICE
     explicit operator bool() const
     {
-        for (int i = 0; i < RANK; ++i) {
-            if (idx[i]) {
-                return true;
-            }
-        }
-        return false;
+        return AnyImpl<0>();
     }
 
     // Return true if Coord is uniformly zero.
     CATLASS_HOST_DEVICE
     bool operator!() const
     {
-        for (int i = 0; i < RANK; ++i) {
-            if (idx[i]) {
-                return false;
-            }
-        }
-        return true;
+        return !AnyImpl<0>();
     }
 
     // Element-wise addition
@@ -104,9 +84,7 @@ public:
     Coord operator+(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; ++i) {
-            c.idx[i] = idx[i] + b.idx[i];
-        }
+        AddCoordImpl<0>(c, b);
         return c;
     }
 
@@ -115,9 +93,7 @@ public:
     Coord operator+(const Index val) const
     {
         Coord c;
-        for (int i = 0; i < RANK; ++i) {
-            c.idx[i] = idx[i] + val;
-        }
+        AddScalarImpl<0>(c, val);
         return c;
     }
 
@@ -126,9 +102,7 @@ public:
     Coord operator-(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; i++) {
-            c.idx[i] = idx[i] - b.idx[i];
-        }
+        SubCoordImpl<0>(c, b);
         return c;
     }
 
@@ -137,9 +111,7 @@ public:
     Coord operator-(Index const val) const
     {
         Coord c;
-        for (int i = 0; i < RANK; ++i) {
-            c.idx[i] = idx[i] - val;
-        }
+        SubScalarImpl<0>(c, val);
         return c;
     }
 
@@ -148,9 +120,7 @@ public:
     Coord operator*(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; i++) {
-            c.idx[i] = idx[i] * b.idx[i];
-        }
+        MulCoordImpl<0>(c, b);
         return c;
     }
 
@@ -159,9 +129,7 @@ public:
     Coord operator/(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; i++) {
-            c.idx[i] = idx[i] / b.idx[i];
-        }
+        DivCoordImpl<0>(c, b);
         return c;
     }
 
@@ -170,9 +138,7 @@ public:
     Coord operator%(Coord const &b) const
     {
         Coord c;
-        for (int i = 0; i < RANK; i++) {
-            c.idx[i] = idx[i] % b.idx[i];
-        }
+        ModCoordImpl<0>(c, b);
         return c;
     }
 
@@ -180,9 +146,7 @@ public:
     CATLASS_HOST_DEVICE
     Coord &operator+=(Coord const &b)
     {
-        for (int i = 0; i < RANK; ++i) {
-            idx[i] += b.idx[i];
-        }
+        PlusEqualImpl<0>(b);
         return *this;
     }
 
@@ -190,24 +154,14 @@ public:
     CATLASS_HOST_DEVICE
     bool operator==(Coord const &b) const
     {
-        for (int i = 0; i < RANK; ++i) {
-            if (idx[i] != b.idx[i]) {
-                return false;
-            }
-        }
-        return true;
+        return EqualCoordImpl<0>(b);
     }
 
     // In-place equal
     CATLASS_HOST_DEVICE
     bool operator==(Index const val) const
     {
-        for (int i = 0; i < RANK; ++i) {
-            if (idx[i] != val) {
-                return false;
-            }
-        }
-        return true;
+        return EqualScalarImpl<0>(val);
     }
 
     // Member acces operator
@@ -273,6 +227,146 @@ public:
     }
 
 private:
+    template <int N>
+    CATLASS_HOST_DEVICE
+    int ArgminImpl(int i) const
+    {
+        if constexpr (N == RANK) {
+            return i;
+        }
+        else{
+            return ArgminImpl<N + 1>(idx[N] < idx[i] ? N : i);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    int ArgmaxImpl(int i) const
+    {
+        if constexpr (N == RANK) {
+            return i;
+        }
+        else{
+            return ArgmaxImpl<N + 1>(idx[N] > idx[i] ? N : i);
+        }
+    }
+    
+    template <int N>
+    CATLASS_HOST_DEVICE
+    bool AnyImpl() const
+    {
+        if constexpr (N == RANK) {
+            return false;
+        }
+        else {
+            return idx[N] || AnyImpl<N + 1>();
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    void AddCoordImpl(Coord &c, Coord const &b) const
+    {
+        if constexpr (N < RANK) {
+            c.idx[N] = idx[N] + b.idx[N];
+            AddCoordImpl<N + 1>(c, b);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    void AddScalarImpl(Coord &c, Index const val) const
+    {
+        if constexpr (N < RANK) {
+            c.idx[N] = idx[N] + val;
+            AddScalarImpl<N + 1>(c, val);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    void SubCoordImpl(Coord &c, Coord const &b) const
+    {
+        if constexpr (N < RANK) {
+            c.idx[N] = idx[N] - b.idx[N];
+            SubCoordImpl<N + 1>(c, b);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    void SubScalarImpl(Coord &c, Index const val) const
+    {
+        if constexpr (N < RANK) {
+            c.idx[N] = idx[N] - val;
+            SubScalarImpl<N + 1>(c, val);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    void MulCoordImpl(Coord &c, Coord const &b) const
+    {
+        if constexpr (N < RANK) {
+            c.idx[N] = idx[N] * b.idx[N];
+            MulCoordImpl<N + 1>(c, b);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    void DivCoordImpl(Coord &c, Coord const &b) const
+    {
+        if constexpr (N < RANK) {
+            c.idx[N] = idx[N] / b.idx[N];
+            DivCoordImpl<N + 1>(c, b);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    void ModCoordImpl(Coord &c, Coord const &b) const
+    {
+        if constexpr (N < RANK) {
+            c.idx[N] = idx[N] % b.idx[N];
+            ModCoordImpl<N + 1>(c, b);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    void PlusEqualImpl(Coord const &b)
+    {
+        if constexpr (N < RANK) {
+            idx[N] += b.idx[N];
+            PlusEqualImpl<N + 1>(b);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    bool EqualCoordImpl(Coord const &b) const
+    {
+        if constexpr (N == RANK) {
+            return true;
+        }
+        else {
+            return idx[N] == b.idx[N] && EqualCoordImpl<N + 1>(b);
+        }
+    }
+
+    template <int N>
+    CATLASS_HOST_DEVICE
+    bool EqualScalarImpl(Index const val) const
+    {
+        if constexpr (N == RANK) {
+            return true;
+        }
+        else {
+            return idx[N] == val && EqualScalarImpl<N + 1>(val);
+        }
+    }
+
     // Indices
     Index idx[RANK];
 };

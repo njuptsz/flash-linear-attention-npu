@@ -1,9 +1,11 @@
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 function(filter_copy_files SELECTED_FILES SELECTED_DIRS)
@@ -69,7 +71,7 @@ function(op_add_subdirectory OP_LIST OP_DIR_LIST)
         file(GLOB OP_HOST_CMAKE_FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/experimental/ffn/**/op_host/CMakeLists.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/experimental/chunk_gated_delta_rule/**/op_host/CMakeLists.txt"
-        "${CMAKE_CURRENT_SOURCE_DIR}/experimental/mc2/**/op_host/CMakeLists.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/experimental/gmm/**/op_host/CMakeLists.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/experimental/moe/**/op_host/CMakeLists.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/experimental/posembedding/**/op_host/CMakeLists.txt"
         )
@@ -77,20 +79,9 @@ function(op_add_subdirectory OP_LIST OP_DIR_LIST)
         file(GLOB OP_HOST_CMAKE_FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/chunk_gated_delta_rule/**/op_host/CMakeLists.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/chunk_gated_delta_rule/**/CMakeLists.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/gmm/**/op_host/CMakeLists.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/gmm/**/CMakeLists.txt"
         )
-        if(BUILD_OPEN_PROJECT AND (NOT BUILD_OPS_RTY_KERNEL))
-            file(GLOB CANNDEV_OPS_HOST_CMAKE_FILES
-                "${CMAKE_CURRENT_SOURCE_DIR}/posembedding/**/op_host/CMakeLists.txt"
-                "${CMAKE_CURRENT_SOURCE_DIR}/moe/**/op_host/CMakeLists.txt"
-                "${CMAKE_CURRENT_SOURCE_DIR}/ffn/**/op_host/CMakeLists.txt"
-                "${CMAKE_CURRENT_SOURCE_DIR}/mc2/**/op_host/CMakeLists.txt"
-                "${CMAKE_CURRENT_SOURCE_DIR}/posembedding/**/framework/CMakeLists.txt"
-                "${CMAKE_CURRENT_SOURCE_DIR}/moe/**/framework/CMakeLists.txt"
-                "${CMAKE_CURRENT_SOURCE_DIR}/ffn/**/framework/CMakeLists.txt"
-                "${CMAKE_CURRENT_SOURCE_DIR}/mc2/**/framework/CMakeLists.txt"
-            )
-            List(APPEND OP_HOST_CMAKE_FILES ${CANNDEV_OPS_HOST_CMAKE_FILES})
-        endif()
     endif()
 
     foreach(OP_CMAKE_FILE ${OP_HOST_CMAKE_FILES})
@@ -117,11 +108,22 @@ function(op_add_subdirectory OP_LIST OP_DIR_LIST)
         endif ()
 
         if (ENABLE_TEST)
+            if (NOT EXISTS "${OP_DIR}/tests/CMakeLists.txt")
+                continue()
+            endif()
+            
             file(READ "${OP_DIR}/tests/CMakeLists.txt" CML_CONTENT)
             if (CML_CONTENT MATCHES "OpsTest_Level2_AddOp")
                 set(UTEST_FRAMEWORK_OLD TRUE CACHE BOOL "UTEST_FRAMEWORK_OLD" FORCE)
             else()
                 set(UTEST_FRAMEWORK_NEW TRUE CACHE BOOL "UTEST_FRAMEWORK_NEW" FORCE)
+            endif()
+        endif()
+
+        if (NOT ENABLE_AICPU)
+            if(EXISTS "${OP_DIR}/op_kernel_aicpu" AND IS_DIRECTORY "${OP_DIR}/op_kernel_aicpu")
+                MESSAGE(STATUS "disable aicpu kernel ${OP_NAME}, skip it.")
+                continue()
             endif()
         endif()
 
@@ -152,7 +154,12 @@ function(op_add_depend_directory)
     foreach(op_name ${DEP_OP_LIST})
         if (DEFINED ${op_name}_depends)
             foreach(depend_info ${${op_name}_depends})
-                if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${depend_info}/op_host/CMakeLists.txt AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/${depend_info}/CMakeLists.txt)
+                if (ENABLE_EXPERIMENTAL)
+ 	                set(depend_info_update "experimental/${depend_info}")
+ 	            else()
+ 	                set(depend_info_update ${depend_info})
+ 	            endif()
+ 	            if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${depend_info_update}/op_host/CMakeLists.txt AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/src/${depend_info_update}/CMakeLists.txt)
                     continue()
                 endif ()
 
@@ -164,7 +171,7 @@ function(op_add_depend_directory)
                 endif ()
 
                 if (NOT ${_depend_op_name} IN_LIST DEP_OP_LIST)
-                    list(APPEND _OP_DEPEND_DIR_LIST ${CMAKE_CURRENT_SOURCE_DIR}/${depend_info})
+                    list(APPEND _OP_DEPEND_DIR_LIST ${CMAKE_CURRENT_SOURCE_DIR}/${depend_info_update})
                 endif ()
             endforeach()
         endif()
@@ -180,6 +187,7 @@ function(add_compile_cmd_target)
 
     if(ADD_OPS_COMPILE_OPTION_V2)
         set(OP_DEBUG_CONFIG_OPTION --opc-config-file ${ASCEND_CUSTOM_OPC_OPTIONS})
+        set(OP_TILING_KEY_OPTION --kernel_template_input ${KERNEL_TEMPLATE_INPUT})
     else()
         if(OP_DEBUG_CONFIG)
             set(OP_DEBUG_CONFIG_OPTION --op-debug-config ${OP_DEBUG_CONFIG})
@@ -199,18 +207,21 @@ function(add_compile_cmd_target)
             ${base_aclnn_binary_dir}/aic-${CMD_COMPUTE_UNIT}-ops-info.ini
             ${GEN_OUT_DIR}
             ${CMD_COMPUTE_UNIT}
+            ${BISHENG_FLAGS}
             ${OP_TILING_KEY_OPTION}
             ${OP_DEBUG_CONFIG_OPTION}
         COMMAND ${HI_PYTHON} ${ASCENDC_CMAKE_UTIL_DIR}/ascendc_bin_param_build.py
             ${base_aclnn_binary_dir}/inner/aic-${CMD_COMPUTE_UNIT}-ops-info.ini
             ${GEN_OUT_DIR}
             ${CMD_COMPUTE_UNIT}
+            ${BISHENG_FLAGS}
             ${OP_TILING_KEY_OPTION}
             ${OP_DEBUG_CONFIG_OPTION}
         COMMAND ${HI_PYTHON} ${ASCENDC_CMAKE_UTIL_DIR}/ascendc_bin_param_build.py
             ${base_aclnn_binary_dir}/exc/aic-${CMD_COMPUTE_UNIT}-ops-info.ini
             ${GEN_OUT_DIR}
             ${CMD_COMPUTE_UNIT}
+            ${BISHENG_FLAGS}
             ${OP_TILING_KEY_OPTION}
             ${OP_DEBUG_CONFIG_OPTION}
         COMMAND bash ${SED_SCRIPT} ${GEN_OUT_DIR}
@@ -352,7 +363,7 @@ endfunction()
 
 function(add_ops_src_copy)
     cmake_parse_arguments(SRC_COPY "" "TARGET_NAME;SRC;DST;BE_RELIED;COMPUTE_UNIT" "" ${ARGN})
-    message(">>>>>>${OPS_ADV_UTILS_KERNEL_INC}")
+
     set(OPS_UTILS_INC_KERNEL_TARGET ops_utils_inc_kernel_${SRC_COPY_COMPUTE_UNIT})
     if (EXISTS ${OPS_ADV_UTILS_KERNEL_INC})
         if (NOT TARGET ${OPS_UTILS_INC_KERNEL_TARGET})
@@ -370,10 +381,13 @@ function(add_ops_src_copy)
     endif ()
 
     set(MC2_OPS_LIST "matmul_reduce_scatter;"
+        "matmul_reduce_scatter_v2;"
         "grouped_mat_mul_allto_allv;"
+        "quant_grouped_mat_mul_allto_allv;"
         "grouped_mat_mul_all_reduce;"
         "batch_mat_mul_reduce_scatter_allto_all;"
         "allto_allv_grouped_mat_mul;"
+        "allto_allv_quant_grouped_mat_mul;"
         "allto_all_all_gather_batch_mat_mul;"
         "distribute_barrier;"
         "moe_distribute_combine_add_rms_norm;"
@@ -381,11 +395,19 @@ function(add_ops_src_copy)
         "moe_distribute_combine;"
         "moe_distribute_dispatch_v2;"
         "moe_distribute_combine_v2;"
+        "moe_distribute_dispatch_v3;"
+        "moe_distribute_combine_v3;"
         "moe_update_expert;"
         "all_gather_matmul;"
+        "all_gather_matmul_v2;"
         "matmul_all_reduce;"
+        "matmul_all_reduce_apt;"
         "matmul_all_reduce_add_rms_norm;"
         "inplace_matmul_all_reduce_add_rms_norm;"
+        "quant_all_reduce;"
+        "quant_reduce_scatter;"
+        "allto_all_matmul;"
+        "matmul_allto_all;"
         "attention_to_ffn;"
         "ffn_to_attention;"
     ) # mc2算子列表
@@ -510,13 +532,18 @@ function(add_bin_compile_target)
 
             if (DEFINED ${op_file}_depends)
                 foreach(depend_info ${${op_file}_depends})
+                    if (ENABLE_EXPERIMENTAL)
+ 	                    set(depend_info_update "experimental/${depend_info}")
+ 	                else()
+ 	                    set(depend_info_update ${depend_info})
+ 	                endif()
                     get_filename_component(_depend_op_name "${depend_info}" NAME)
                     set(_depend_op_target ${_depend_op_name}_${BINARY_COMPUTE_UNIT}_src_copy)
                     add_ops_src_copy(
                             TARGET_NAME
                             ${_depend_op_target}
                             SRC
-                            ${CMAKE_SOURCE_DIR}/${depend_info}
+                            ${CMAKE_SOURCE_DIR}/${depend_info_update}
                             DST
                             ${SRC_OUT_DIR}/${_depend_op_name}
                             COMPUTE_UNIT
@@ -565,9 +592,17 @@ function(add_bin_compile_target)
         set(_group "1-0")
         if (DEFINED ASCEND_OP_NAME AND NOT "${ASCEND_OP_NAME}" STREQUAL "")
             if (NOT "${ASCEND_OP_NAME}" STREQUAL "all" AND NOT "${ASCEND_OP_NAME}" STREQUAL "ALL")
-                if (${op_file} IN_LIST ASCEND_OP_NAME)
-                    list(LENGTH ASCEND_OP_NAME _len)
+                string(REGEX MATCH "^(.*_apt)$" _match_apt ${op_file})
+                if(_match_apt)
+                    #如果以_apt结尾，使用去掉后缀的文件名进行查找
+                    string(REGEX REPLACE "_apt$" "" _op_file_strip_apt ${op_file})
+                    list(FIND ASCEND_OP_NAME ${_op_file_strip_apt} _index)
+                else()
                     list(FIND ASCEND_OP_NAME ${op_file} _index)
+                    set(_op_file_strip_apt ${op_file})
+                endif()
+                if (${op_file} IN_LIST ASCEND_OP_NAME OR ${_op_file_strip_apt} IN_LIST ASCEND_OP_NAME)
+                    list(LENGTH ASCEND_OP_NAME _len)
                     math(EXPR _next_index "${_index} + 1")
                     if (${_next_index} LESS ${_len})
                         list(GET ASCEND_OP_NAME ${_next_index} _group_str)
@@ -759,7 +794,7 @@ function(add_static_ops)
         list(REMOVE_DUPLICATES modified_files)
         add_custom_command(OUTPUT ${static_src_temp_dir}
             COMMAND mkdir -p ${static_src_temp_dir}
-            COMMAND cp -rf ${STATIC_SRC_DIR}/chunk_gated_delta_rule ${STATIC_SRC_DIR}/mc2 ${STATIC_SRC_DIR}/attention ${static_src_temp_dir} || true
+            COMMAND cp -rf ${STATIC_SRC_DIR}/chunk_gated_delta_rule ${STATIC_SRC_DIR}/gmm ${STATIC_SRC_DIR}/mc2 ${STATIC_SRC_DIR}/attention ${static_src_temp_dir} || true
             COMMAND ${HI_PYTHON} -B ${OPS_STATIC_SCRIPT} InsertIni -p ${static_src_temp_dir} -f ${modified_files}
         )
 
@@ -767,6 +802,25 @@ function(add_static_ops)
                 DEPENDS ${static_src_temp_dir}
         )
     endif()
+endfunction()
+
+function(pack_tiling_sink)
+  ExternalProject_Get_Property(tiling_sink_task BINARY_DIR)
+
+  if(ENABLE_BUILT_IN)
+    set(TRANSFORMER_OPMASTER_SO ${BINARY_DIR}/libtiling_device_transformer.so)
+    set(INSTALL_DIR "ops_transformer/built-in/op_impl/ai_core/tbe/op_tiling_device/lib")
+  else()
+    set(TRANSFORMER_OPMASTER_SO ${BINARY_DIR}/libcust_opmaster.so)
+    set(INSTALL_DIR "packages/vendors/${VENDOR_NAME}_transformer/op_impl/ai_core/tbe/op_master_device/lib")
+  endif()
+  install(CODE "
+    if(EXISTS \"${TRANSFORMER_OPMASTER_SO}\")
+      file(
+        INSTALL DESTINATION \"\${CMAKE_INSTALL_PREFIX}/${INSTALL_DIR}\"
+        TYPE FILE FILES \"${TRANSFORMER_OPMASTER_SO}\")
+    endif()
+  ")
 endfunction()
 
 if (BUILD_OPEN_PROJECT)
@@ -777,3 +831,148 @@ if (BUILD_OPEN_PROJECT)
         include(${OPS_ADV_CMAKE_DIR}/func_examples.cmake)
     endif ()
 endif ()
+
+function(concat_op_names)
+    set(multiValueArgs OPTYPE ACLNNTYPE ACLNN_EXTRA_VERSION)
+    cmake_parse_arguments(ARG "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if(${ARG_ACLNNTYPE} STREQUAL "aclnn")
+        set(ACLNN_PREFIX aclnn_${ARG_OPTYPE})
+        set(ACLNN_EXTRA_HEADER "")
+        set(ACLNN_EXTRA_SRC "")
+
+        list(LENGTH ARG_ACLNN_EXTRA_VERSION AclnnExtraVersionLen)
+        math(EXPR index "${AclnnExtraVersionLen} - 1")
+        if (index GREATER_EQUAL 0)
+            foreach(i RANGE ${index})
+                list(GET ARG_ACLNN_EXTRA_VERSION ${i} version)
+                list(APPEND ACLNN_EXTRA_HEADER ${ACLNN_PREFIX}_${version}.h)
+                list(APPEND ACLNN_EXTRA_SRC ${ACLNN_PREFIX}_${version}.cpp)
+            endforeach()
+        endif()
+
+        list(APPEND ACLNN_EXTRA_HEADERS ${ACLNN_EXTRA_HEADER})
+        list(REMOVE_DUPLICATES ACLNN_EXTRA_HEADERS)
+        list(APPEND ACLNN_EXTRA_SRCS ${ACLNN_EXTRA_SRC})
+        list(REMOVE_DUPLICATES ACLNN_EXTRA_SRCS)
+
+        set(ACLNN_EXTRA_HEADERS
+            ${ACLNN_EXTRA_HEADERS}
+            CACHE STRING "Aclnn Extra Headers" FORCE
+        )
+        set(ACLNN_EXTRA_SRCS
+            ${ACLNN_EXTRA_SRCS}
+            CACHE STRING "Aclnn Extra Sources" FORCE
+        )
+
+    elseif(${ARG_ACLNNTYPE} STREQUAL "aclnn_inner")
+        set(ACLNNINNER_PREFIX aclnnInner_${ARG_OPTYPE})
+        set(ACLNNINNER_EXTRA_HEADER "")
+        set(ACLNNINNER_EXTRA_SRC "")
+
+        list(LENGTH ARG_ACLNN_EXTRA_VERSION AclnnExtraVersionLen)
+        math(EXPR index "${AclnnExtraVersionLen} - 1")
+        if (index GREATER_EQUAL 0)
+            foreach(i RANGE ${index})
+                list(GET ARG_ACLNN_EXTRA_VERSION ${i} version)
+                list(APPEND ACLNNINNER_EXTRA_HEADER ${ACLNNINNER_PREFIX}_${version}.h)
+                list(APPEND ACLNNINNER_EXTRA_SRC ${ACLNNINNER_PREFIX}_${version}.cpp)
+            endforeach()
+        endif()
+
+        list(APPEND ACLNNINNER_EXTRA_HEADERS ${ACLNNINNER_EXTRA_HEADER})
+        list(REMOVE_DUPLICATES ACLNNINNER_EXTRA_HEADERS)
+        list(APPEND ACLNNINNER_EXTRA_SRCS ${ACLNNINNER_EXTRA_SRC})
+        list(REMOVE_DUPLICATES ACLNNINNER_EXTRA_SRCS)
+
+        set(ACLNNINNER_EXTRA_HEADERS
+            ${ACLNNINNER_EXTRA_HEADERS}
+            CACHE STRING "AclnnInner Extra Headers" FORCE
+        )
+        set(ACLNNINNER_EXTRA_SRCS
+            ${ACLNNINNER_EXTRA_SRCS}
+            CACHE STRING "AclnnInner Extra Sources" FORCE
+        )
+    endif()
+endfunction()
+
+macro(replace_cur_major_minor_ver)
+    string(REPLACE CUR_MAJOR_MINOR_VER "${CANN_VERSION_${CANN_VERSION_CURRENT_PACKAGE}_VERSION_MAJOR_MINOR}" depend "${depend}")
+endmacro()
+ 	 
+# 设置包和版本号
+function(set_package name)
+    cmake_parse_arguments(VERSION "" "VERSION" "" ${ARGN})
+    set(VERSION "${VERSION_VERSION}")
+    if(NOT name)
+        message(FATAL_ERROR "The name parameter is not set in set_package.")
+    endif()
+    if(NOT VERSION)
+        message(FATAL_ERROR "The VERSION parameter is not set in set_package(${name}).")
+    endif()
+    string(REGEX MATCH "^([0-9]+\\.[0-9]+)" VERSION_MAJOR_MINOR "${VERSION}")
+    list(APPEND CANN_VERSION_PACKAGES "${name}")
+    set(CANN_VERSION_PACKAGES "${CANN_VERSION_PACKAGES}" PARENT_SCOPE)
+    set(CANN_VERSION_CURRENT_PACKAGE "${name}" PARENT_SCOPE)
+    set(CANN_VERSION_${name}_VERSION "${VERSION}" PARENT_SCOPE)
+    set(CANN_VERSION_${name}_VERSION_MAJOR_MINOR "${VERSION_MAJOR_MINOR}" PARENT_SCOPE)
+    set(CANN_VERSION_${name}_BUILD_DEPS PARENT_SCOPE)
+    set(CANN_VERSION_${name}_RUN_DEPS PARENT_SCOPE)
+endfunction()
+ 	 
+# 设置构建依赖
+function(set_build_dependencies pkg_name depend)
+    if(NOT CANN_VERSION_CURRENT_PACKAGE)
+        message(FATAL_ERROR "The set_package must be invoked first.")
+    endif()
+    if(NOT pkg_name)
+        message(FATAL_ERROR "The pkg_name parameter is not set in set_build_dependencies.")
+    endif()
+    if(NOT depend)
+        message(FATAL_ERROR "The depend parameter is not set in set_build_dependencies.")
+    endif()
+    replace_cur_major_minor_ver()
+    list(APPEND CANN_VERSION_${CANN_VERSION_CURRENT_PACKAGE}_BUILD_DEPS "${pkg_name}" "${depend}")
+    set(CANN_VERSION_${CANN_VERSION_CURRENT_PACKAGE}_BUILD_DEPS "${CANN_VERSION_${CANN_VERSION_CURRENT_PACKAGE}_BUILD_DEPS}" PARENT_SCOPE)
+endfunction()
+ 	 
+# 设置运行依赖
+function(set_run_dependencies pkg_name depend)
+    if(NOT CANN_VERSION_CURRENT_PACKAGE)
+        message(FATAL_ERROR "The set_package must be invoked first.")
+    endif()
+    if(NOT pkg_name)
+        message(FATAL_ERROR "The pkg_name parameter is not set in set_run_dependencies.")
+    endif()
+    if(NOT depend)
+        message(FATAL_ERROR "The depend parameter is not set in set_run_dependencies.")
+    endif()
+    replace_cur_major_minor_ver()
+    list(APPEND CANN_VERSION_${CANN_VERSION_CURRENT_PACKAGE}_RUN_DEPS "${pkg_name}" "${depend}")
+    set(CANN_VERSION_${CANN_VERSION_CURRENT_PACKAGE}_RUN_DEPS "${CANN_VERSION_${CANN_VERSION_CURRENT_PACKAGE}_RUN_DEPS}" PARENT_SCOPE)
+endfunction()
+ 	 
+# 检查构建依赖
+function(check_pkg_build_deps pkg_name)
+    execute_process(
+        COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_build_dependencies.py "${ASCEND_CANN_PACKAGE_PATH}" ${CANN_VERSION_${pkg_name}_BUILD_DEPS}
+        RESULT_VARIABLE result
+    )
+    if(result)
+        message(FATAL_ERROR "Check ${pkg_name} build dependencies failed!")
+    endif()
+endfunction()
+ 	 
+# 添加生成version.info的目标
+# 目标名格式为：version_${包名}_info
+function(add_version_info_targets)
+    foreach(pkg_name ${CANN_VERSION_PACKAGES})
+        add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/version.${pkg_name}.info
+            COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_version_info.py --output ${CMAKE_BINARY_DIR}/version.${pkg_name}.info
+                    "${CANN_VERSION_${pkg_name}_VERSION}" ${CANN_VERSION_${pkg_name}_RUN_DEPS}
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/version.cmake ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_version_info.py
+            VERBATIM
+        )
+        add_custom_target(version_${pkg_name}_info ALL DEPENDS ${CMAKE_BINARY_DIR}/version.${pkg_name}.info)
+    endforeach()
+endfunction()

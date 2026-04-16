@@ -1,9 +1,11 @@
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 # 组件划分信息: classify_rule.yaml  
 # ut/example配置: tests/test_config.yaml      
@@ -109,13 +111,13 @@ transformer-2@ops-transformer:
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_s1s2_bns1_mla.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_s1s2_bns1_x910_base.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_bnstilling_n_s_tail.h
-                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/kernel_data_copy_transpose.h
+                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/kernel_data_copy_transpose.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/mla_custom_matmul_policy_d192.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_split_n_s_no_tail.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_var_len_score_sab.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/mla_common.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_bnstilling_n_s_tailWBNSD.h
-                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/kernel_operator_softmax_compute_nz.h
+                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/kernel_operator_softmax_compute_nz.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_s1s2_bns1_mla_baseapi.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/mla_custom_matmul_policy_common.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_bnstilling_n_s_no_tailWBNSD.h
@@ -125,7 +127,7 @@ transformer-2@ops-transformer:
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_var_len_score_sab_baseapi.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_bnstilling_n_s_no_tail.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/pfa_service_matmul_kv_nd.h
-                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_tilingkey.h
+                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/prompt_flash_attention_tilingkey.h
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch35/
                 - ops/ops-transformer/attention/prompt_flash_attention/tests/
                 - ops/ops-transformer/attention/prompt_flash_attention/README.md
@@ -197,14 +199,21 @@ transformer-5@ops-transformer:
     src:  
         release:
             huawei_style: 
+                - ops/ops-transformer/attention/common/op_kernel/arch35/flash_attention_score_antiquant_block_cube.h
+                - ops/ops-transformer/attention/common/op_kernel/arch35/flash_attention_score_antiquant_block_vec.h
+                - ops/ops-transformer/attention/common/op_kernel/arch35/flash_attention_score_antiquant_kernel.h
                 - ops/ops-transformer/attention/common/op_kernel/arch35/flash_attention_score_antiquant_processor.h
                 - ops/ops-transformer/attention/common/op_kernel/arch35/flash_attention_score_antiquant_baseapi.h
+                - ops/ops-transformer/attention/common/op_kernel/array.h
                 - ops/ops-transformer/attention/common/op_kernel/memory_copy.h
                 - ops/ops-transformer/attention/common/op_kernel/CopyInL1.h
                 - ops/ops-transformer/attention/common/op_kernel/FixpipeOut.h
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling_v2.cpp
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling_v2.h
                 - ops/ops-transformer/attention/incre_flash_attention/op_kernel/arch32/incre_flash_attention_preload_mla.h
                 - ops/ops-transformer/attention/incre_flash_attention/op_kernel/arch32/ifa_service_matmul_full_quant.h
-                - ops/ops-transformer/common
+                - ops/ops-transformer/attention/incre_flash_attention/op_kernel/arch35/service/antiquant_preprocessor_q.h
+                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch35/vf/vf_antiquant.h
             opensource_style: null  
             kernel_style: null  
         unrelease:
@@ -216,13 +225,24 @@ ifa@ops-transformer:
     src:  
         release:
             huawei_style: null ##
-            opensource_style:  
-                - ops/ops-transformer/attention/incre_flash_attention/op_host  
+            opensource_style:
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/op_api
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/fallback_incre_flash_attention.cpp
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_def.cpp
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_infershape.cpp
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling_base.h
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling_check.cpp
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling_context.h
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling_impl.h
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling_mla.h
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling_register.cpp
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling_struct.h
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling.cpp
+                - ops/ops-transformer/attention/incre_flash_attention/op_host/incre_flash_attention_tiling.h
                 - ops/ops-transformer/attention/incre_flash_attention/op_kernel/arch20  
                 - ops/ops-transformer/attention/incre_flash_attention/op_kernel/arch32/paged_attention_antiquantkv.h  
                 - ops/ops-transformer/attention/incre_flash_attention/op_kernel/incre_flash_attention_tilingkey.h  
                 - ops/ops-transformer/attention/incre_flash_attention/op_kernel/incre_flash_attention_obp.h  
-                - ops/ops-transformer/attention/incre_flash_attention/examples/test_aclnn_incre_flash_attention.cpp 
                 - ops/ops-transformer/attention/nsa_compress_with_cache/op_host  
                 - ops/ops-transformer/attention/nsa_compress_with_cache/op_kernel  
                 - ops/ops-transformer/attention/nsa_selected_attention_infer/op_host  
@@ -233,6 +253,7 @@ ifa@ops-transformer:
         unrelease:
             test_code:  
                 - ops/ops-transformer/attention/incre_flash_attention/op_kernel/arch35
+                - ops/ops-transformer/attention/incre_flash_attention/examples/test_aclnn_incre_flash_attention.cpp 
                 - asl/ops/cann/ops/built-in/fusion_pass/graph_fusion/ai_core/incre_flash_attention_fusion_pass_utils.cc
                 - asl/ops/cann/ops/built-in/fusion_pass/graph_fusion/ai_core/incre_flash_attention_fusion_pass_utils.h
                 - asl/ops/cann/ops/built-in/fusion_pass/graph_fusion/ai_core/incre_flash_attention_quant_deploy_pass.cc
@@ -250,8 +271,8 @@ pfa@ops-transformer:
                 - ops/ops-transformer/attention/prompt_flash_attention/op_host  
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/prompt_flash_attention_obp.h  
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/prompt_flash_attention_310p.h  
-                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_attention_prefill.h  
-                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/unpad_flash_attention_common.h  
+                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/prompt_attention_prefill.h  
+                - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/unpad_flash_attention_common.h  
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_base_api.h  
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch32/prompt_flash_attention_base_common.h  
                 - ops/ops-transformer/attention/prompt_flash_attention/examples/test_aclnn_prompt_flash_attention.cpp  
@@ -263,6 +284,9 @@ pfa@ops-transformer:
             test_code:  
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch35
                 - ops/ops-transformer/attention/prompt_flash_attention/op_kernel/arch38
+                - ops/ops-transformer/attention/prompt_flash_attention/op_host/prompt_flash_attention_tiling_v2.cpp
+                - ops/ops-transformer/attention/prompt_flash_attention/op_host/prompt_flash_attention_tiling_arch38.cpp
+                - ops/ops-transformer/attention/fused_infer_attention_score/op_kernel/attn_infra/
                 - ops/ops-transformer/attention/fused_infer_attention_score/op_host/arch35/fused_infer_attention_score_tiling_v2.cpp
                 - ops/ops-transformer/attention/fused_infer_attention_score/op_host/arch35/fused_infer_attention_score_tiling_v2.h
                 - asl/ops/ops_adv/tests/ut/ops_test/src/transformer/prompt_flash_attention/
@@ -312,6 +336,7 @@ mc2_moe_advanced@ops-transformer:
                 - ops/ops-transformer/mc2/moe_distribute_dispatch/op_api/
                 - ops/ops-transformer/mc2/moe_distribute_dispatch/op_graph/
                 - ops/ops-transformer/mc2/moe_distribute_dispatch/op_kernel/arch35/
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/arch35/
                 - ops/ops-transformer/mc2/moe_distribute_dispatch/op_kernel/check_winsize.h
                 - ops/ops-transformer/mc2/moe_distribute_dispatch/op_kernel/common.h
                 - ops/ops-transformer/mc2/moe_distribute_dispatch/op_kernel/moe_distribute_dispatch_tiling_key.h
@@ -325,6 +350,7 @@ mc2_moe_advanced@ops-transformer:
                 - ops/ops-transformer/mc2/moe_distribute_combine/op_api/
                 - ops/ops-transformer/mc2/moe_distribute_combine/op_graph/
                 - ops/ops-transformer/mc2/moe_distribute_combine/op_kernel/arch35/
+                - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_kernel/arch35/
                 - ops/ops-transformer/mc2/moe_distribute_combine/op_kernel/moe_distribute_combine_tiling_key.h
                 - ops/ops-transformer/mc2/moe_distribute_combine/op_kernel/moe_distribute_combine_tiling.h
                 - ops/ops-transformer/mc2/moe_distribute_combine/op_kernel/moe_distribute_combine.cpp
@@ -353,21 +379,46 @@ mc2_moe@ops-transformer:
                 - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_host/
                 - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_api/
                 - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_graph/
-                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/
                 - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/CMakeLists.txt
                 - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/README.md
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/common.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_tiling.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2_full_mesh.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2_host_kfc.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2_layered.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2_quant.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2_tiling_key.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2_tiling.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2.cpp
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_elastic.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2_base.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/moe_distribute_dispatch_v2_constant.h
+                - ops/ops-transformer/mc2/moe_distribute_dispatch_v2/op_kernel/quantize_functions.h
                 - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_host/
                 - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_api/
                 - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_graph/
-                - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_kernel/
                 - ops/ops-transformer/mc2/moe_distribute_combine_v2/CMakeLists.txt
                 - ops/ops-transformer/mc2/moe_distribute_combine_v2/README.md
+                - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_kernel/moe_distribute_combine_tiling.h
+                - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_kernel/moe_distribute_combine_v2_layered.h
+                - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_kernel/moe_distribute_combine_v2_quant.h
+                - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_kernel/moe_distribute_combine_v2_tiling_key.h
+                - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_kernel/moe_distribute_combine_v2_tiling.h
+                - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_kernel/moe_distribute_combine_v2.cpp
+                - ops/ops-transformer/mc2/moe_distribute_combine_v2/op_kernel/moe_distribute_combine_v2.h
                 - ops/ops-transformer/mc2/moe_distribute_combine_add_rms_norm/op_host/
                 - ops/ops-transformer/mc2/moe_distribute_combine_add_rms_norm/op_api/
                 - ops/ops-transformer/mc2/moe_distribute_combine_add_rms_norm/op_graph/
                 - ops/ops-transformer/mc2/moe_distribute_combine_add_rms_norm/op_kernel/
                 - ops/ops-transformer/mc2/moe_distribute_combine_add_rms_norm/CMakeLists.txt
                 - ops/ops-transformer/mc2/moe_distribute_combine_add_rms_norm/README.md
+                - ops/ops-transformer/mc2/moe_distribute_buffer_reset/op_host/
+                - ops/ops-transformer/mc2/moe_distribute_buffer_reset/op_api/
+                - ops/ops-transformer/mc2/moe_distribute_buffer_reset/op_graph/
+                - ops/ops-transformer/mc2/moe_distribute_buffer_reset/op_kernel/
+                - ops/ops-transformer/mc2/moe_distribute_buffer_reset/CMakeLists.txt
+                - ops/ops-transformer/mc2/moe_distribute_buffer_reset/README.md
                 - ops/ops-transformer/mc2/moe_update_expert/op_host/
                 - ops/ops-transformer/mc2/moe_update_expert/op_api/
                 - ops/ops-transformer/mc2/moe_update_expert/op_graph/
@@ -380,6 +431,18 @@ mc2_moe@ops-transformer:
                 - ops/ops-transformer/mc2/distribute_barrier/op_kernel/
                 - ops/ops-transformer/mc2/distribute_barrier/CMakeLists.txt
                 - ops/ops-transformer/mc2/distribute_barrier/README.md
+                - ops/ops-transformer/mc2/elastic_receivable_test/op_host/
+                - ops/ops-transformer/mc2/elastic_receivable_test/op_api/
+                - ops/ops-transformer/mc2/elastic_receivable_test/op_graph/
+                - ops/ops-transformer/mc2/elastic_receivable_test/op_kernel/
+                - ops/ops-transformer/mc2/elastic_receivable_test/CMakeLists.txt
+                - ops/ops-transformer/mc2/elastic_receivable_test/README.md
+                - ops/ops-transformer/mc2/elastic_receivable_info_collect/op_host/
+                - ops/ops-transformer/mc2/elastic_receivable_info_collect/op_api/
+                - ops/ops-transformer/mc2/elastic_receivable_info_collect/op_graph/
+                - ops/ops-transformer/mc2/elastic_receivable_info_collect/op_kernel/
+                - ops/ops-transformer/mc2/elastic_receivable_info_collect/CMakeLists.txt
+                - ops/ops-transformer/mc2/elastic_receivable_info_collect/README.md
             opensource_style: null 
             kernel_style: null  
         unrelease:
@@ -393,12 +456,21 @@ mc2_moe@ops-transformer:
                 - ops/ops-transformer/mc2/moe_distribute_combine_add_rms_norm/tests/
                 - ops/ops-transformer/mc2/moe_distribute_combine_add_rms_norm/examples/
                 - ops/ops-transformer/mc2/moe_distribute_combine_add_rms_norm/docs/
+                - ops/ops-transformer/mc2/moe_distribute_buffer_reset/tests/
+                - ops/ops-transformer/mc2/moe_distribute_buffer_reset/examples/
+                - ops/ops-transformer/mc2/moe_distribute_buffer_reset/docs/
                 - ops/ops-transformer/mc2/moe_update_expert/tests/
                 - ops/ops-transformer/mc2/moe_update_expert/examples/
                 - ops/ops-transformer/mc2/moe_update_expert/docs/
                 - ops/ops-transformer/mc2/distribute_barrier/tests/
                 - ops/ops-transformer/mc2/distribute_barrier/examples/
                 - ops/ops-transformer/mc2/distribute_barrier/docs/
+                - ops/ops-transformer/mc2/elastic_receivable_test/tests/
+                - ops/ops-transformer/mc2/elastic_receivable_test/examples/
+                - ops/ops-transformer/mc2/elastic_receivable_test/docs/
+                - ops/ops-transformer/mc2/elastic_receivable_info_collect/tests/
+                - ops/ops-transformer/mc2/elastic_receivable_info_collect/examples/
+                - ops/ops-transformer/mc2/elastic_receivable_info_collect/docs/  
             non_delivery: null  
             open_source:
                 - ops/ops-transformer/mc2/3rd/batch_mat_mul_v3/ 
@@ -467,12 +539,33 @@ mc2_infer@ops-transformer:
                 - ops/ops-transformer/mc2/matmul_reduce_scatter/op_kernel/
                 - ops/ops-transformer/mc2/matmul_reduce_scatter/CMakeLists.txt
                 - ops/ops-transformer/mc2/matmul_reduce_scatter/README.md
+                - asl/ops/cann/ops/mc2/communication_and_computation/all_gather_matmul_v2/op_host/
+                - asl/ops/cann/ops/mc2/communication_and_computation/all_gather_matmul_v2/graph_plugin/
+                - asl/ops/cann/ops/mc2/communication_and_computation/all_gather_matmul_v2/op_kernel/
+                - ops/ops-transformer/mc2/matmul_reduce_scatter_v2/op_host/
+                - ops/ops-transformer/mc2/matmul_reduce_scatter_v2/op_api/
+                - ops/ops-transformer/mc2/matmul_reduce_scatter_v2/op_graph/
+                - ops/ops-transformer/mc2/matmul_reduce_scatter_v2/op_kernel/
+                - ops/ops-transformer/mc2/matmul_reduce_scatter_v2/CMakeLists.txt
+                - ops/ops-transformer/mc2/matmul_reduce_scatter_v2/README.md
                 - ops/ops-transformer/mc2/matmul_all_reduce/op_host/
                 - ops/ops-transformer/mc2/matmul_all_reduce/op_api/
                 - ops/ops-transformer/mc2/matmul_all_reduce/op_graph/
                 - ops/ops-transformer/mc2/matmul_all_reduce/op_kernel/
                 - ops/ops-transformer/mc2/matmul_all_reduce/CMakeLists.txt
                 - ops/ops-transformer/mc2/matmul_all_reduce/README.md
+                - ops/ops-transformer/mc2/quant_all_reduce/op_host/
+                - ops/ops-transformer/mc2/quant_all_reduce/op_api/
+                - ops/ops-transformer/mc2/quant_all_reduce/op_graph/
+                - ops/ops-transformer/mc2/quant_all_reduce/op_kernel/
+                - ops/ops-transformer/mc2/quant_all_reduce/CMakeLists.txt
+                - ops/ops-transformer/mc2/quant_all_reduce/README.md
+                - ops/ops-transformer/mc2/quant_reduce_scatter/op_host/
+                - ops/ops-transformer/mc2/quant_reduce_scatter/op_api/
+                - ops/ops-transformer/mc2/quant_reduce_scatter/op_graph/
+                - ops/ops-transformer/mc2/quant_reduce_scatter/op_kernel/
+                - ops/ops-transformer/mc2/quant_reduce_scatter/CMakeLists.txt
+                - ops/ops-transformer/mc2/quant_reduce_scatter/README.md
                 - ops/ops-transformer/mc2/3rd/common/
                 - ops/ops-transformer/mc2/3rd/ops_legacy/
                 - ops/ops-transformer/mc2/3rd/CMakeLists.txt
@@ -488,9 +581,21 @@ mc2_infer@ops-transformer:
                 - ops/ops-transformer/mc2/matmul_reduce_scatter/tests/
                 - ops/ops-transformer/mc2/matmul_reduce_scatter/examples/
                 - ops/ops-transformer/mc2/matmul_reduce_scatter/docs/
+                - asl/ops/cann/ops/mc2/communication_and_computation/all_gather_matmul_v2/tests/
+                - asl/ops/cann/ops/mc2/communication_and_computation/all_gather_matmul_v2/examples/
+                - asl/ops/cann/ops/mc2/communication_and_computation/all_gather_matmul_v2/docs/
+                - ops/ops-transformer/mc2/matmul_reduce_scatter_v2/tests/
+                - ops/ops-transformer/mc2/matmul_reduce_scatter_v2/examples/
+                - ops/ops-transformer/mc2/matmul_reduce_scatter_v2/docs/
                 - ops/ops-transformer/mc2/matmul_all_reduce/tests/
                 - ops/ops-transformer/mc2/matmul_all_reduce/examples/
                 - ops/ops-transformer/mc2/matmul_all_reduce/docs/
+                - ops/ops-transformer/mc2/quant_all_reduce/tests/
+                - ops/ops-transformer/mc2/quant_all_reduce/examples/
+                - ops/ops-transformer/mc2/quant_all_reduce/docs/
+                - ops/ops-transformer/mc2/quant_reduce_scatter/tests/
+                - ops/ops-transformer/mc2/quant_reduce_scatter/examples/
+                - ops/ops-transformer/mc2/quant_reduce_scatter/docs/ 
             non_delivery: null  
             open_source:
                 - ops/ops-transformer/mc2/3rd/weight_quant_batch_matmul_v2/ 
@@ -499,6 +604,7 @@ moe@ops-transformer:
     src:  
         release:
             huawei_style: 
+                - common/include/external/aclnn_kernels/aclnn_platform.h
                 - ops/ops-transformer/moe/moe_compute_expert_tokens/op_host/
                 - ops/ops-transformer/moe/moe_compute_expert_tokens/op_graph/
                 - ops/ops-transformer/moe/moe_compute_expert_tokens/op_kernel/
@@ -519,6 +625,11 @@ moe@ops-transformer:
                 - ops/ops-transformer/moe/moe_finalize_routing_v2_grad/op_kernel/
                 - ops/ops-transformer/moe/moe_finalize_routing_v2_grad/CMakeLists.txt
                 - ops/ops-transformer/moe/moe_finalize_routing_v2_grad/README.md
+                - ops/ops-transformer/moe/moe_gating_top_k/op_host/
+                - ops/ops-transformer/moe/moe_gating_top_k/op_graph/
+                - ops/ops-transformer/moe/moe_gating_top_k/op_kernel/
+                - ops/ops-transformer/moe/moe_gating_top_k/CMakeLists.txt
+                - ops/ops-transformer/moe/moe_gating_top_k/README.md
                 - ops/ops-transformer/moe/moe_gating_top_k_softmax/op_host/
                 - ops/ops-transformer/moe/moe_gating_top_k_softmax/op_graph/
                 - ops/ops-transformer/moe/moe_gating_top_k_softmax/op_kernel/
@@ -554,26 +665,26 @@ moe@ops-transformer:
                 - ops/ops-transformer/moe/moe_init_routing_v2_grad/op_kernel/
                 - ops/ops-transformer/moe/moe_init_routing_v2_grad/CMakeLists.txt
                 - ops/ops-transformer/moe/moe_init_routing_v2_grad/README.md
-                - ops/ops-transformer/moe/moe_token_permute_with_ep/op_host/
-                - ops/ops-transformer/moe/moe_token_permute_with_ep/op_graph/
-                - ops/ops-transformer/moe/moe_token_permute_with_ep/op_kernel/
-                - ops/ops-transformer/moe/moe_token_permute_with_ep/CMakeLists.txt
-                - ops/ops-transformer/moe/moe_token_permute_with_ep/README.md
-                - ops/ops-transformer/moe/moe_token_permute_with_ep_grad/op_host/
-                - ops/ops-transformer/moe/moe_token_permute_with_ep_grad/op_graph/
-                - ops/ops-transformer/moe/moe_token_permute_with_ep_grad/op_kernel/
-                - ops/ops-transformer/moe/moe_token_permute_with_ep_grad/CMakeLists.txt
-                - ops/ops-transformer/moe/moe_token_permute_with_ep_grad/README.md
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map/op_host/
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map/op_graph/
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map/op_kernel/
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map/CMakeLists.txt
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map/README.md
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map_grad/op_host/
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map_grad/op_graph/
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map_grad/op_kernel/
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map_grad/CMakeLists.txt
-                - ops/ops-transformer/moe/moe_token_permute_with_routing_map_grad/README.md
+                - ops/ops-transformer/moe/moe_init_routing_v3/op_host/
+                - ops/ops-transformer/moe/moe_init_routing_v3/op_graph/
+                - ops/ops-transformer/moe/moe_init_routing_v3/op_kernel/
+                - ops/ops-transformer/moe/moe_init_routing_v3/CMakeLists.txt
+                - ops/ops-transformer/moe/moe_init_routing_v3/README.md
+                - ops/ops-transformer/moe/moe_init_re_routing/op_host/
+                - ops/ops-transformer/moe/moe_init_re_routing/op_graph/
+                - ops/ops-transformer/moe/moe_init_re_routing/op_kernel/
+                - ops/ops-transformer/moe/moe_init_re_routing/CMakeLists.txt
+                - ops/ops-transformer/moe/moe_init_re_routing/README.md
+                - ops/ops-transformer/moe/moe_token_permute/op_host/
+                - ops/ops-transformer/moe/moe_token_permute/op_graph/
+                - ops/ops-transformer/moe/moe_token_permute/op_kernel/
+                - ops/ops-transformer/moe/moe_token_permute/CMakeLists.txt
+                - ops/ops-transformer/moe/moe_token_permute/README.md
+                - ops/ops-transformer/moe/moe_token_permute_grad/op_host/
+                - ops/ops-transformer/moe/moe_token_permute_grad/op_graph/
+                - ops/ops-transformer/moe/moe_token_permute_grad/op_kernel/
+                - ops/ops-transformer/moe/moe_token_permute_grad/CMakeLists.txt
+                - ops/ops-transformer/moe/moe_token_permute_grad/README.md
                 - ops/ops-transformer/moe/moe_token_unpermute/op_host/
                 - ops/ops-transformer/moe/moe_token_unpermute/op_graph/
                 - ops/ops-transformer/moe/moe_token_unpermute/op_kernel/
@@ -584,26 +695,6 @@ moe@ops-transformer:
                 - ops/ops-transformer/moe/moe_token_unpermute_grad/op_kernel/
                 - ops/ops-transformer/moe/moe_token_unpermute_grad/CMakeLists.txt
                 - ops/ops-transformer/moe/moe_token_unpermute_grad/README.md
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep/op_host/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep/op_graph/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep/op_kernel/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep/CMakeLists.txt
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep/README.md
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep_grad/op_host/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep_grad/op_graph/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep_grad/op_kernel/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep_grad/CMakeLists.txt
-                - ops/ops-transformer/moe/moe_token_unpermute_with_ep_grad/README.md
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map/op_host/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map/op_graph/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map/op_kernel/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map/CMakeLists.txt
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map/README.md
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map_grad/op_host/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map_grad/op_graph/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map_grad/op_kernel/
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map_grad/CMakeLists.txt
-                - ops/ops-transformer/moe/moe_token_unpermute_with_routing_map_grad/README.md
             opensource_style: null 
             kernel_style: null  
         unrelease:
@@ -678,7 +769,7 @@ HPTG2@ops-transformer:
     src:  
         release:
             huawei_style: 
-                - ops-transformer/posembedding/apply_rotary_pos_emb/op_host/apply_rotary_pos_emb_tiling_aba_and_ba_arch35.cpp
+                - ops/ops-transformer/posembedding/apply_rotary_pos_emb/op_host/apply_rotary_pos_emb_tiling_aba_and_ba_arch35.cpp
             opensource_style: null 
             kernel_style: null  
         unrelease:
@@ -711,7 +802,7 @@ GMMSwigluQuant@ops-transformer:
                 - ops/ops-transformer/gmm/grouped_matmul/op_kernel/grouped_matmul.h
                 - ops/ops-transformer/gmm/grouped_matmul/op_host/op_tiling/grouped_matmul_tiling.cpp
                 - ops/ops-transformer/gmm/grouped_matmul/op_host/op_tiling/grouped_matmul_tiling.h
-                - ops/ops-transformer/gmm/grouped_matmul/op_host/op_api/aclnn_grouped_matmul.cpp
+                - ops/ops-transformer/gmm/grouped_matmul/op_api/aclnn_grouped_matmul.cpp
                 - ops/ops-transformer/gmm/grouped_matmul_swiglu_quant_v2/op_kernel/grouped_matmul_swiglu_quant_spilit_fusion.h
                 - ops/ops-transformer/gmm/grouped_matmul_swiglu_quant_v2/op_kernel/grouped_matmul_swiglu_quant_v2_a8w4_msd_mid.h
                 - ops/ops-transformer/gmm/grouped_matmul_swiglu_quant_v2/op_kernel/grouped_matmul_swiglu_quant_v2_a8w4_msd_post.h
@@ -729,4 +820,4 @@ GMMSwigluQuant@ops-transformer:
         unrelease:
             test_code: null 
             non_delivery: null  
-            open_source: null 
+            open_source: null

@@ -1,9 +1,11 @@
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 cmake_minimum_required(VERSION 3.16)
@@ -44,24 +46,7 @@ if(UT_TEST_ALL OR OP_API_UT)
     return()
   endif()
   string(REPLACE ";" "," ALL_OP "${ALL_OP}")
-  set(RUNTIME_STUB_CPP ${CMAKE_CURRENT_BINARY_DIR}/runtime_stubs.cpp)
-  file(GLOB CHIP_DIRS "${ASCEND_DIR}/opp/built-in/op_impl/ai_core/tbe/kernel/config/*")
-  if (CHIP_DIRS)
-      list(GET CHIP_DIRS 0 CHIP_DIR_PATH)
-      get_filename_component(CHIP_NAME ${CHIP_DIR_PATH} NAME)
-  endif()
-  add_custom_command(
-      OUTPUT ${RUNTIME_STUB_CPP}
-      COMMAND sudo ${Python3_EXECUTABLE} ${OPS_TRANSFORMER_DIR}/tests/ut/framework_normal/op_api/scripts/generate_opapi_stub.py
-              ${ALL_OP} ${ASCEND_DIR} ${CHIP_NAME} ${RUNTIME_STUB_CPP}
-      DEPENDS ${OPS_TRANSFORMER_DIR}/tests/ut/framework_normal/op_api/scripts/generate_opapi_stub.py
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-      COMMENT "Generating runtime_stubs.cpp"
-    )
-  add_custom_target(generate_opapi_stub
-      DEPENDS ${RUNTIME_STUB_CPP}
-  )
-
+  set(RUNTIME_STUB_CPP ${CMAKE_CURRENT_SOURCE_DIR}/stub/opdev/runtime_stubs.cpp)
   add_executable(${OP_API_UT_EXE}
           test_op_api_main.cpp
           $<TARGET_OBJECTS:${OP_API_MODULE_NAME}_cases_obj>
@@ -93,8 +78,6 @@ if(UT_TEST_ALL OR OP_API_UT)
           c_sec
           -Wl,--no-whole-archive
           )
-  add_dependencies(${OP_API_UT_EXE} generate_opapi_stub)
-
 
   ## exec opapi ut exe
   if(ENABLE_UT_EXEC)
@@ -120,25 +103,31 @@ if(UT_TEST_ALL OR OP_API_UT)
       endif()
 
       add_custom_command(
-          TARGET ${OP_API_UT_EXE}
-          POST_BUILD
-          COMMAND
-              ${CMAKE_COMMAND} -E env
-              LD_LIBRARY_PATH=$ENV{LD_LIBRARY_PATH}
-              LD_PRELOAD=${LIBASAN_PATH}:${LIBSTDC_PATH} ASAN_OPTIONS=detect_leaks=0
-              ${PRELOAD}
-              bash -c "./${OP_API_UT_EXE};"sudo ${Python3_EXECUTABLE} ${OPS_TRANSFORMER_DIR}/tests/ut/framework_normal/op_api/scripts/clean_opapi_stub.py ${ALL_OP} ${ASCEND_DIR} ${CHIP_NAME}""
-          COMMENT "Run ops op_api utest with asan"
+        TARGET ${OP_API_UT_EXE}
+        POST_BUILD
+        COMMAND
+          ${CMAKE_COMMAND} -E env
+          LD_LIBRARY_PATH=$ENV{LD_LIBRARY_PATH}
+          LD_PRELOAD=${LIBASAN_PATH}:${LIBSTDC_PATH} ASAN_OPTIONS=detect_leaks=0
+          ${PRELOAD}
+          bash -c "\
+          ./${OP_API_UT_EXE}\
+          "
+        COMMENT "Run ops op_api utest with asan"
+        VERBATIM
       )
     else()
       add_custom_command(
-              TARGET ${OP_API_UT_EXE}
-              POST_BUILD
-              COMMAND
-                ${CMAKE_COMMAND} -E env
-                LD_LIBRARY_PATH=$ENV{LD_LIBRARY_PATH}
-                bash -c "./${OP_API_UT_EXE};"sudo ${Python3_EXECUTABLE} ${OPS_TRANSFORMER_DIR}/tests/ut/framework_normal/op_api/scripts/clean_opapi_stub.py ${ALL_OP} ${ASCEND_DIR} ${CHIP_NAME}""
-              COMMENT "Run ops op_api utest"
+        TARGET ${OP_API_UT_EXE}
+        POST_BUILD
+        COMMAND
+          ${CMAKE_COMMAND} -E env
+          LD_LIBRARY_PATH=$ENV{LD_LIBRARY_PATH}
+          bash -c "\
+          ./${OP_API_UT_EXE}\
+          "
+        COMMENT "Run ops op_api utest"
+        VERBATIM
       )
     endif()
   endif()

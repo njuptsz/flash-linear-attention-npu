@@ -1,9 +1,11 @@
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 # ######################################################################################################################
 # 调用opbuild工具，生成aclnn/aclnnInner/.ini的算子信息库 等文件
@@ -90,7 +92,9 @@ function(gen_aclnn_classify host_obj prefix ori_out_srcs ori_out_headers opbuild
     endif()
   else()
     set(${opbuild_out_srcs} ${ori_out_srcs} ${out_srcs} PARENT_SCOPE)
-    set(${opbuild_out_headers} ${ori_out_headers} ${out_headers} PARENT_SCOPE)
+    if ("${prefix}" STREQUAL "aclnn")
+      set(${opbuild_out_headers} ${ori_out_headers} ${out_headers} PARENT_SCOPE)
+    endif()
   endif()
 endfunction()
 
@@ -125,6 +129,30 @@ function(gen_aclnn_with_opdef)
   gen_aclnn_classify(${OPHOST_NAME}_opdef_aclnn_exclude_obj aclnnExc "${opbuild_out_srcs}" "${opbuild_out_headers}"
     opbuild_out_srcs opbuild_out_headers)
 
+  set(filtered_opbuild_out_headers)
+  foreach(header_file ${opbuild_out_headers})
+    set(skip_this_header FALSE)
+
+    get_filename_component(header_name ${header_file} NAME)
+    if(header_name MATCHES "aclnn_([^.]+)\\.h")
+      set(op_name ${CMAKE_MATCH_1})
+      string(TOUPPER ${op_name} op_name_upper)
+      string(REPLACE "-" "_" op_name_upper ${op_name_upper})
+
+      set(skip_var_name "${op_name_upper}_SKIP_HEADER")
+      if(DEFINED ${skip_var_name} AND ${skip_var_name})
+        message(STATUS "Skipping header packaging for operator: ${op_name}")
+        set(skip_this_header TRUE)
+      endif()
+    endif()
+
+    if(NOT skip_this_header)
+      list(APPEND filtered_opbuild_out_headers ${header_file})
+    endif()
+  endforeach()
+
+  set(opbuild_out_headers ${filtered_opbuild_out_headers})
+
   # 创建汇总头文件
   if(NOT ENABLE_BUILT_IN)
     set(aclnn_master_header_name "aclnn_ops_transformer_${VENDOR_NAME}")
@@ -134,45 +162,16 @@ function(gen_aclnn_with_opdef)
   set(aclnn_master_header "${CMAKE_CURRENT_BINARY_DIR}/${aclnn_master_header_name}.h")
   gen_aclnn_master_header(${aclnn_master_header_name} "${aclnn_master_header}" "${opbuild_out_headers}")
 
-  set(mc2_op_aclnn_name 
-        "all_gather_matmul"
-        "all_to_all_all_gather_batch_matmul"
-        "allto_allv_grouped_mat_mul"
-        "batch_matmul_reduce_scatter_all_to_all"
-        "distribute_barrier"
-        "distribute_barrier_v2"
-        "grouped_mat_mul_allto_allv"
-        "inplace_matmul_all_reduce_add_rms_norm"
-        "inplace_quant_matmul_all_reduce_add_rms_norm"
-        "inplace_weight_quant_matmul_all_reduce_add_rms_norm"
-        "matmul_all_reduce"
-        "matmul_all_reduce_add_rms_norm"
-        "matmul_all_reduce_v2"
-        "matmul_reduce_scatter"
-        "moe_distribute_combine"
-        "moe_distribute_combine_add_rms_norm"
-        "moe_distribute_combine_add_rms_norm_v2"
-        "moe_distribute_combine_v2"
-        "moe_distribute_combine_v3"
-        "moe_distribute_dispatch"
-        "moe_distribute_dispatch_v2"
-        "moe_distribute_dispatch_v3"
-        "moe_update_expert"
-        "weight_quant_matmul_all_reduce"
-        "weight_quant_matmul_all_reduce_add_rms_norm"
-      )
   set(mc2_aclnn_master_headers "")
-  foreach(op_aclnn_name ${mc2_op_aclnn_name})
-    if (NOT ENABLE_BUILT_IN AND NOT ("${ASCEND_OP_NAME}" STREQUAL "ALL"))
-      foreach(op_name IN LISTS ASCEND_OP_NAME)
-        file(GLOB matching_file "${OPS_TRANSFORMER_DIR}/mc2/${op_name}/op_api/aclnn_${op_aclnn_name}.h")
-        list(APPEND mc2_aclnn_master_headers ${matching_file})
-      endforeach()
-    else()
-      file(GLOB matching_file "${OPS_TRANSFORMER_DIR}/mc2/*/op_api/aclnn_${op_aclnn_name}.h")
+  if (NOT ENABLE_BUILT_IN AND NOT ("${ASCEND_OP_NAME}" STREQUAL "ALL"))
+    foreach(op_name IN LISTS ASCEND_OP_NAME)
+      file(GLOB matching_file "${OPS_TRANSFORMER_DIR}/mc2/${op_name}/op_api/aclnn_*.h")
       list(APPEND mc2_aclnn_master_headers ${matching_file})
-    endif()
-  endforeach()
+    endforeach()
+  else()
+    file(GLOB matching_file "${OPS_TRANSFORMER_DIR}/mc2/*/op_api/aclnn_*.h")
+    list(APPEND mc2_aclnn_master_headers ${matching_file})
+  endif()
 
   # 将头文件安装到packages/vendors/vendor_name/op_api/include
   if (NOT ENABLE_BUILT_IN)
@@ -243,7 +242,16 @@ function(merge_graph_headers)
     ${proto_headers}
     --output-file ${MGPROTO_OUT_DIR}/ops_proto_transformer.h
   )
-  add_custom_target(${MGPROTO_TARGET} ALL
+  add_custom_command(
+    OUTPUT ${MGPROTO_OUT_DIR}/ops_proto_transformer.cpp
+    COMMAND ${CMAKE_COMMAND} -E copy
+      ${MGPROTO_OUT_DIR}/ops_proto_transformer.h
+      ${MGPROTO_OUT_DIR}/ops_proto_transformer.cpp
     DEPENDS ${MGPROTO_OUT_DIR}/ops_proto_transformer.h
+  )
+  add_custom_target(${MGPROTO_TARGET} ALL
+    DEPENDS
+    ${MGPROTO_OUT_DIR}/ops_proto_transformer.h
+    ${MGPROTO_OUT_DIR}/ops_proto_transformer.cpp
   )
 endfunction()

@@ -15,22 +15,37 @@
 #ifndef CHUNK_BWD_DV_LOCAL_CUBE_FIX_H
 #define CHUNK_BWD_DV_LOCAL_CUBE_FIX_H
 
-#include "kernel_operator.h"
-
-#include "catlass/gemm/block/block_swizzle.hpp"
-#include "catlass/gemm/block/block_mmad.hpp"
-#include "catlass/gemm/dispatch_policy.hpp"
-
+#if defined(__CCE_AICORE__) && __CCE_AICORE__ == 310
+#define CATLASS_ARCH 3510
+#include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
-#include "catlass/arch/resource.hpp"
-#include "catlass/coord.hpp"
-#include "catlass/gemm_coord.hpp"
-#include "catlass/matrix_coord.hpp"
-#include "tla/tensor.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
+using _128 = tla::Int<128>;
+#else
+#define CATLASS_ARCH 2201
+#include "catlass/arch/arch.hpp"
+#include "catlass/catlass.hpp"
+#include "catlass/gemm/block/block_mmad.hpp"
+#include "catlass/gemm/block/block_swizzle.hpp"
+#include "catlass/gemm/device/device_gemm.hpp"
+#include "catlass/gemm/dispatch_policy.hpp"
+#include "catlass/gemm/gemm_type.hpp"
+#include "catlass/layout/layout.hpp"
+#include "catlass/status.hpp"
+#include "tla/layout.hpp"
+#include "tla/tensor.hpp"
+#endif
 
 #include "chunk_bwd_dv_local_common.h"
+using namespace tla;
 namespace GDN {
 
 template <typename QKVT, typename GT, typename Strategy>
@@ -85,8 +100,12 @@ ChunkBwdDvLocalCube<QKVT, GT, Strategy>::Init(GM_ADDR q, GM_ADDR k, GM_ADDR d_o,
 template <typename QKVT, typename GT, typename Strategy>
 __aicore__ inline void ChunkBwdDvLocalCube<QKVT, GT, Strategy>::Process()
 {
-    using ArchTag = Catlass::Arch::AtlasA2;
-    using DispatchPolicy = Catlass::Gemm::MmadPingpong<ArchTag, true>;
+    #if defined(__CCE_AICORE__) && __CCE_AICORE__ == 310
+        using ArchTag = Catlass::Arch::Ascend950;
+    #else
+        using ArchTag = Catlass::Arch::AtlasA2;
+    #endif    
+    using DispatchPolicy = Catlass::Gemm::MmadPingpong<ArchTag, true, false>;
     using L1TileShape = Shape<_128, _128, _128>;
     using L0TileShape = Shape<_128, _128, _128>;
     using ElementA = QKVT;

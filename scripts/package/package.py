@@ -3,14 +3,17 @@
 # -----------------------------------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 import os
 import sys
 import re
+import subprocess
 import argparse
 import traceback
 import csv
@@ -21,6 +24,7 @@ from functools import partial
 from itertools import chain
 from typing import Dict, Iterator, List, Set, Tuple, TextIO
 import shutil
+import shlex
 
 from common.py.utils import pkg_utils
 from common.py.filelist import (
@@ -28,7 +32,8 @@ from common.py.filelist import (
     get_transform_nested_path_func,
 )
 from common.py.packer import (
-    PackageName, create_makeself_pkg_params_factory, create_run_package_command, exec_pack_cmd
+    PackageName, create_makeself_pkg_params_factory,
+    create_run_package_command, softlink_before_package, exec_pack_cmd
 )
 from common.py.pkg_parser import (
     ParseOption, XmlConfig, parse_xml_config, get_cann_version_info
@@ -44,13 +49,19 @@ from common.py.utils.comm_log import CommLog
 
 def get_comments(package_name: PackageName) -> str:
     """获取run包注释。"""
-    comments = '_'.join(
-        [package_name.chip_name.upper(), package_name.func_name.upper(), 'RUN_PACKAGE']
-    )
+    if not package_name.chip_name:
+        comments = '_'.join(
+            [package_name.product_name.upper(), package_name.func_name.upper(), 'RUN_PACKAGE']
+        )
+    else:
+        comments = '_'.join(
+            [package_name.chip_name.upper(), package_name.func_name.upper(), 'RUN_PACKAGE']
+        )
     return f'"{comments}"'
 
 
 def get_compress_cmd(delivery_dir: str,
+                     build_dir: str,
                      pkg_args: Namespace,
                      xml_config: XmlConfig) -> str:
     """获取makeself压缩命令"""
@@ -72,7 +83,7 @@ def get_compress_cmd(delivery_dir: str,
         CommLog.cilog_error("the repack type '%s' is not support!", suffix)
         sys.exit(FAIL)
     try:
-        makeself_dir = os.path.join(TOP_DIR, "build/makeself.txt")
+        makeself_dir = os.path.join(build_dir, "makeself.txt")
         with open(makeself_dir, 'w') as f:
             f.write(pack_cmd)
     except Exception as exception:
@@ -109,6 +120,45 @@ class PackageOption(PrivatePackageOption):
         return super().__new__(cls, *package_option_args, **kwargs)
 
 
+def generate_hash_list(target_conf, hash_cfg_str, release_dir):
+    target_name = get_target_name(target_conf)
+    dst_path = os.path.join(release_dir, target_conf.get('dst_path', ''))
+
+    dst_full_path = os.path.join(dst_path, target_name)
+    hash_cmd = "sha256sum " + dst_full_path
+    cmd_list = shlex.split(hash_cmd)
+    process = subprocess.run(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    stat, output = process.returncode, process.stdout
+    if stat != SUCCESS:
+        CommLog.cilog_error("get_image_hash command: %s", hash_cmd)
+        CommLog.cilog_info("get_image_hash failed!(%s)", output)
+        return FAIL, None
+    hash_value = output.split()[0]
+    hash_cfg_str += f"{target_name}={hash_value}\n"
+    return SUCCESS, hash_cfg_str
+
+
+def generate_hash_file(delivery_dir, hash_list):
+    """
+    功能描述：生成hash文件
+    参数：delivery_dir打包的临时目录
+          hash_list生成的cfg列表
+    """
+    hash_path = os.path.join(delivery_dir, "bin_hash.cfg")
+    if not os.path.exists(hash_path):
+        cmd = "touch " + hash_path
+        cmd_list = shlex.split(cmd)
+        process = subprocess.run(cmd_list, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        stat, output = process.returncode, process.stdout
+        if stat != SUCCESS:
+            CommLog.cilog_error("%s failed!", cmd)
+            CommLog.cilog_info("%s, output")
+            return FAIL, None
+    with open(os.path.join(hash_path), "w") as fw:
+        fw.write(hash_list)
+    return SUCCESS
+
+
 def generate_info_content(target_conf, ext_name) -> List[str]:
     """生成info内容。"""
 
@@ -143,8 +193,8 @@ def generate_version_header_content(target_conf) -> Iterator[str]:
     yield ''
 
 
-def generate_customized_file(target_conf, ext_name):
-    filepath = os.path.join(TOP_DIR, "build", target_conf.get('value'))
+def generate_customized_file(target_conf, ext_name, build_dir):
+    filepath = os.path.join(build_dir, target_conf.get('value'))
 
     generator = target_conf.get('generator', 'info')
     if generator == 'version_header':
@@ -306,10 +356,26 @@ def execute_repack_process(xml_config: XmlConfig,
     """
     release_dir = os.path.join(
         delivery_dir, xml_config.default_config.get('name', 'default'))
+    build_dir = delivery_dir.replace("_CPack_Packages/makeself_staging", "")
     # 生成自定义文件
     for item in xml_config.generate_infos:
-        if generate_customized_file(item, package_option.ext_name):
+        if generate_customized_file(item, package_option.ext_name, build_dir):
             return FAIL
+
+    hash_cfg_str = ""
+    for item in chain(xml_config.package_content_list, xml_config.move_content_list):
+        if get_target_name(item) == "bin_hash.cfg":
+            ret = generate_hash_file(delivery_dir, hash_cfg_str)
+            if ret != SUCCESS:
+                CommLog.cilog_error("generate hash file failed!")
+                return FAIL
+        if "is_hash" in item:
+            ret, hash_cfg_str = generate_hash_list(item, hash_cfg_str, release_dir)
+            if ret != SUCCESS:
+                CommLog.cilog_error("generate hash command %s failed!", get_target_name(item))
+                return FAIL
+
+    softlink_before_package(xml_config.pkg_soft_links, release_dir)
 
     # 校验包中文件或目录大小
     if pkg_args.check_size == "True":
@@ -325,7 +391,7 @@ def execute_repack_process(xml_config: XmlConfig,
             if not result:
                 return FAIL
     try:
-        package_name = get_compress_cmd(pkg_args.pkg_output_dir, pkg_args, xml_config)
+        package_name = get_compress_cmd(pkg_args.pkg_output_dir, build_dir, pkg_args, xml_config)
     except CompressError:
         return FAIL
 
@@ -494,6 +560,7 @@ def gen_file_install_list(xml_config: XmlConfig,
 
 def generate_filelist_file_by_xml_config(xml_config: XmlConfig,
                                          filter_key: List[str],
+                                         build_dir: str,
                                          package_check: bool):
     """生成文件列表文件。"""
     check_move = xml_config.package_attr.get('use_move', False)
@@ -510,9 +577,10 @@ def generate_filelist_file_by_xml_config(xml_config: XmlConfig,
         ),
         xml_config, filter_key
     )
-    generate_filelist(file_install_list, 'filelist.csv')
+    generate_filelist(file_install_list, 'filelist.csv', build_dir)
     # 先生成再检查，有利于问题定位
-    check_filelist(file_install_list, check_features, check_move)
+    if package_check:
+        check_filelist(file_install_list, check_features, check_move)
 
 
 def get_pkg_xml_relative_path(pkg_args: Namespace) -> str:
@@ -539,12 +607,12 @@ def write_config_inc_var(name: str, package_attr: Dict, file: TextIO):
         file.write(f"{name.upper()}={value}\n")
 
 
-def generate_config_inc(package_attr: Dict):
+def generate_config_inc(package_attr: Dict, build_dir: str,):
     """生成config.inc文件。"""
     if 'parallel' not in package_attr and 'parallel_limit' not in package_attr and 'use_move' not in package_attr:
         return
     year = datetime.now(timezone.utc).year
-    config_inc = os.path.join(TOP_DIR, "build", 'config.inc')
+    config_inc = os.path.join(build_dir, 'config.inc')
     header = [
         '#!/bin/sh\n',
         '#----------------------------------------------------------------------------\n',
@@ -573,6 +641,12 @@ def update_version_info(new_version: str):
         file.write(content)
 
 
+def get_filter_key(pkg_name):
+    if pkg_name in ['driver', 'firmware']:
+        return ['all', 'docker']
+    return [] if pkg_name in ['aicpu_kernels_device', 'aicpu_kernels_host'] else ['all', 'run']
+
+
 def main(pkg_name='', xml_file='', main_args=None):
     """
     功能描述: 执行打包流程(解析配置--->生成文件列表--->执行拷贝/打包动作)
@@ -580,7 +654,12 @@ def main(pkg_name='', xml_file='', main_args=None):
     返回值: SUCCESS/FAIL
     """
     delivery_dir = os.path.join(TOP_DIR, DELIVERY_PATH)
+    build_dir = os.path.join(TOP_DIR, "build")
+    if main_args.delivery_dir and main_args.delivery_dir != "":
+        delivery_dir = os.path.join(main_args.delivery_dir, "_CPack_Packages/makeself_staging")
+        build_dir = main_args.delivery_dir
     if not os.path.exists(delivery_dir):
+        CommLog.cilog_error(f"delivery dir not exist: {delivery_dir}")
         return FAIL
 
     config_relative_path = get_pkg_xml_relative_path(main_args)
@@ -590,24 +669,20 @@ def main(pkg_name='', xml_file='', main_args=None):
         update_version_info(main_args.version_dir)
 
     try:
-        xml_config = parse_xml_config(
+        ret, xml_config = parse_xml_config(
             pkg_xml_file, delivery_dir, parse_option, main_args
         )
     except ContainAsteriskError as ex:
         CommLog.cilog_error(f"Value contain '*' in {config_relative_path}. value is '{ex.value}'.")
         return FAIL
 
-    if pkg_name in ['driver', 'firmware']:
-        filter_key = ['all', 'docker']
-    elif pkg_name in ['aicpu_kernels_device', 'aicpu_kernels_host']:
-        filter_key = []
-    else:
-        filter_key = ['all', 'run']
+    if not ret:
+        return FAIL
 
     # 生成filelist.csv安装列表文件
     try:
         generate_filelist_file_by_xml_config(
-            xml_config, filter_key,
+            xml_config, get_filter_key(pkg_name), build_dir,
             main_args.package_check or xml_config.package_attr.get('package_check')
         )
     except PackageNameEmptyError:
@@ -620,7 +695,7 @@ def main(pkg_name='', xml_file='', main_args=None):
         CommLog.cilog_error('check filelist error! %s', str(ex))
         return FAIL
 
-    generate_config_inc(xml_config.package_attr)
+    generate_config_inc(xml_config.package_attr, build_dir)
 
     if main_args.independent_pkg:
         src_file_path = os.path.join(TOP_DIR, "build", "filelist.csv")
@@ -687,6 +762,8 @@ def args_parse():
                         help='source root dir.')
     parser.add_argument('--makeself_dir', metavar='makeself_dir', required=False, dest='makeself_dir', 
                         nargs='?', const='', help='makeself dir.')
+    parser.add_argument('--delivery_dir', metavar='delivery_dir', required=False, dest='delivery_dir', 
+                        nargs='?', const='', help='delivery dir.')
     parser.add_argument('--independent_pkg', action='store_true', help='Independent pkg.')                    
     parser.add_argument('--pkg-output-dir', default='', help='Package dirpath.')
     parser.add_argument('--version_dir', nargs='?', const='', default='', help='Set version dir.')
@@ -715,4 +792,3 @@ if __name__ == "__main__":
         CommLog.cilog_info("%s", traceback.format_exc())
         status = FAIL
     sys.exit(status)
-open

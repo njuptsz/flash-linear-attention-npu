@@ -1,10 +1,11 @@
 /**
  * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 /*!
@@ -94,38 +95,22 @@ HcclResult MC2HcomTopology::CallHcomGetCommHandleByGroup([[maybe_unused]] const 
     return HCCL_SUCCESS;
 }
 
-HcclResult MC2HcomTopology::CallCommGetNetLayers([[maybe_unused]] HcclComm comm, [[maybe_unused]] uint32_t **netLayers, 
-                                                 [[maybe_unused]] uint32_t *netLayerNum) const
-{
-    return HCCL_SUCCESS;
-}
-
-HcclResult MC2HcomTopology::CallCommGetInstTopoTypeByNetLayer([[maybe_unused]] HcclComm comm, 
-                                                              [[maybe_unused]] uint32_t netLayer, 
-                                                              [[maybe_unused]] uint32_t *topoType) const
-{
-    return HCCL_SUCCESS;
-}
-
-HcclResult MC2HcomTopology::CallCommGetInstSizeByNetLayer([[maybe_unused]] HcclComm comm, 
-                                                          [[maybe_unused]] uint32_t netLayer, 
-                                                          [[maybe_unused]] uint32_t *rankNum) const
-{
-    return HCCL_SUCCESS;
-}
-
 HcclResult MC2HcomTopology::CallCommGetCCLBufSizeCfg([[maybe_unused]] HcclComm comm, uint64_t *cclBufferSize) const
 {
     *cclBufferSize = MC2HcomTopologyMocker::GetInstance().GetValue("cclBufferSize", DEFAULT_CCL_BUFFER_SIZE);
     return HCCL_SUCCESS;
 }
 
-HcclResult MC2HcomTopology::CallHcomGetRankSizeEx(const char *group, uint32_t *ranksize, uint32_t flag) const
+HcclResult MC2HcomTopology::CallHcomGetRankSizeEx([[maybe_unused]] const char *group,
+                                                  [[maybe_unused]] uint32_t *ranksize,
+                                                  [[maybe_unused]] uint32_t flag) const
 {
     return HCCL_SUCCESS;
 }
 
-HcclResult MC2HcomTopology::CallHcomGetL0TopoTypeEx(const char *group, CommTopo *topoType, uint32_t flag) const
+HcclResult MC2HcomTopology::CallHcomGetL0TopoTypeEx([[maybe_unused]] const char *group,
+                                                    [[maybe_unused]] CommTopo *topoType,
+                                                    [[maybe_unused]] uint32_t flag) const
 {
     return HCCL_SUCCESS;
 }

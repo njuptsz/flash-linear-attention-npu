@@ -1,10 +1,11 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * the BSD 3-Clause License (the "License").
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_LAYOUT_MATRIX_HPP
@@ -800,6 +801,183 @@ public:
     typename Stride::Index &stride(int idx)
     {
         return stride_[idx];
+    }
+
+private:
+    /// Origin Shape data member
+    OrgShape orgShape_;
+
+    /// Shape data member
+    Shape shape_;
+
+    /// Stride data member
+    Stride stride_;
+};
+
+/// Mapping function for L0C matrices
+/// A special data layout for L0C memory, used for accumulator storage.
+/// This layout similar to zN layout, but uses C0_NUM_PER_FRACTAL for both row and column inner dimensions.
+struct L0C {
+public:
+    /// Logical rank of tensor
+    static constexpr int RANK = 4;
+
+    /// Index type used for coordinates
+    using Index = uint32_t;
+
+    /// Long index type used for offsets
+    using LongIndex = int64_t;
+
+    /// Logical rank of orgshape
+    static constexpr int ORG_SHAPE_RANK = 2;
+
+    /// Logical coordinate
+    using OrgShape = Coord<ORG_SHAPE_RANK, Index>;
+
+    /// Logical coordinate
+    using Shape = Coord<RANK, Index>;
+
+    /// Stride vector
+    using Stride = Coord<RANK, LongIndex>;
+
+public:
+    // Methods
+
+    /// Constructor
+    CATLASS_HOST_DEVICE constexpr
+    L0C(Index orgRows = 0,                 /// Number of rows of origin matrices
+        Index orgCols = 0,                 /// Number of cols of origin matrices
+        Index rowsInFractal = 0,           /// Number of rows inside the fractal
+        Index rowsByFractal = 0,           /// number of rows by the fractal
+        Index colsInFractal = 0,           /// number of cols inside the fractal
+        Index colsByFractal = 0,           /// number of cols by the fractal
+        LongIndex strideRowsInFractal = 0, /// number of elements between adjacent rows inside the fractal
+        LongIndex strideRowsByFractal = 0, /// number of elements between adjacent fractal rows
+        LongIndex strideColsInFractal = 0, /// number of elements between adjacent cols inside the fractal
+        LongIndex strideColsByFractal = 0) /// number of elements between adjacent fractal cols
+        : orgShape_(MakeCoord(orgRows, orgCols)),
+          shape_(MakeCoord(rowsInFractal, rowsByFractal, colsInFractal, colsByFractal)),
+          stride_(MakeCoord(strideRowsInFractal, strideRowsByFractal, strideColsInFractal, strideColsByFractal)) {}
+
+    /// Ctor
+    CATLASS_HOST_DEVICE constexpr
+    L0C(OrgShape orgShape, Shape shape, Stride stride) : orgShape_(orgShape), shape_(shape), stride_(stride) {}
+
+    /// Make the layout of a coordinate (row, column)
+    template <class Element>
+    CATLASS_HOST_DEVICE constexpr
+    static L0C MakeLayout(Index orgRows, Index orgCols)
+    {
+        constexpr uint32_t ELE_NUM_PER_FRACTAL = 256;
+        Index rowsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgRows);
+        Index colsRound = RoundUp<C0_NUM_PER_FRACTAL>(orgCols);
+        return L0C(orgRows,
+                   orgCols,
+                   C0_NUM_PER_FRACTAL,
+                   rowsRound / C0_NUM_PER_FRACTAL,
+                   C0_NUM_PER_FRACTAL,
+                   colsRound / C0_NUM_PER_FRACTAL,
+                   C0_NUM_PER_FRACTAL,
+                   ELE_NUM_PER_FRACTAL,
+                   1,
+                   rowsRound * C0_NUM_PER_FRACTAL);
+    }
+
+    /// Returns the offset of a coordinate in linear memory.
+    /// Assumes coordinate has convention (row, column)
+    CATLASS_HOST_DEVICE
+    LongIndex GetOffset(MatrixCoord const &coord) const
+    {
+        return LongIndex(coord.row()) / shape_[0] * stride_[1] + LongIndex(coord.column()) / shape_[2] * stride_[3] +
+            (LongIndex(coord.row()) % shape_[0]) * stride_[0] + (LongIndex(coord.column()) % shape_[2]) * stride_[2];
+    }
+
+    /// Returns the layout of a tile.
+    CATLASS_HOST_DEVICE
+    L0C GetTileLayout(MatrixCoord const &tileOriShape) const
+    {
+        auto tileShape = MakeCoord(
+            shape(0), CeilDiv(tileOriShape.row(), shape(0)),
+            shape(2), CeilDiv(tileOriShape.column(), shape(2))
+        );
+        return L0C(tileOriShape, tileShape, stride());
+    }
+
+    /// Returns the origin shape of the layout
+    CATLASS_HOST_DEVICE
+    typename OrgShape::Index orgShape(int idx) const
+    {
+        return orgShape_[idx];
+    }
+
+    /// Returns the origin shape of the layout
+    CATLASS_HOST_DEVICE
+    typename OrgShape::Index &orgShape(int idx)
+    {
+        return orgShape_[idx];
+    }
+
+    /// Returns the shape of the layout
+    CATLASS_HOST_DEVICE
+    Shape shape() const
+    {
+        return shape_;
+    }
+
+    /// Returns the shape of the layout
+    CATLASS_HOST_DEVICE
+    Shape &shape()
+    {
+        return shape_;
+    }
+
+    /// Returns the shape of the layout
+    CATLASS_HOST_DEVICE
+    typename Shape::Index shape(int idx) const
+    {
+        return shape_[idx];
+    }
+
+    /// Returns the shape of the layout
+    CATLASS_HOST_DEVICE
+    typename Shape::Index &shape(int idx)
+    {
+        return shape_[idx];
+    }
+
+    /// Returns the stride of the layout
+    CATLASS_HOST_DEVICE
+    Stride stride() const
+    {
+        return stride_;
+    }
+
+    /// Returns the stride of the layout
+    CATLASS_HOST_DEVICE
+    Stride &stride()
+    {
+        return stride_;
+    }
+
+    /// Returns the stride of the layout
+    CATLASS_HOST_DEVICE
+    typename Stride::Index stride(int idx) const
+    {
+        return stride_[idx];
+    }
+
+    /// Returns the stride of the layout
+    CATLASS_HOST_DEVICE
+    typename Stride::Index &stride(int idx)
+    {
+        return stride_[idx];
+    }
+
+    /// Returns the length of the layout
+    CATLASS_HOST_DEVICE
+    LongIndex Capacity() const
+    {
+        return static_cast<LongIndex>(stride_[3]) * shape_[3];
     }
 
 private:

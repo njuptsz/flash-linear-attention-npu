@@ -1,19 +1,21 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  * This file is a part of the CANN Open Software.
- * Licensed under the BSD 3-Clause License (the "License").
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
  * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ * See LICENSE in the root of the software repository for the full text of the License.
  */
 
 #ifndef CATLASS_CONV_BLOCK_BLOCK_CONV2D_PINGPONG_HPP
 #define CATLASS_CONV_BLOCK_BLOCK_CONV2D_PINGPONG_HPP
 
-#include "catlass/catlass.hpp"
 #include "catlass/arch/resource.hpp"
-#include "catlass/conv_coord.hpp"
+#include "catlass/catlass.hpp"
 #include "catlass/conv/dispatch_policy.hpp"
+#include "catlass/conv_coord.hpp"
 #include "catlass/gemm/helper.hpp"
 
 namespace Catlass::Conv::Block {
@@ -33,17 +35,9 @@ template <
     class OutputType_,
     class BiasType_,
     class TileCopy_,
-    class TileMmad_
->
-struct BlockConv2d <
-    ConvAtlasA2Pingpong<
-        L1A_STAGES_,
-        L1B_STAGES_,
-        L0A_STAGES_,
-        L0B_STAGES_,
-        L0C_STAGES_,
-        ENABLE_UNIT_FLAG_
-    >,
+    class TileMmad_>
+struct BlockConv2d<
+    ConvAtlasA2Pingpong<L1A_STAGES_, L1B_STAGES_, L0A_STAGES_, L0B_STAGES_, L0C_STAGES_, ENABLE_UNIT_FLAG_>,
     FmapL1TileShape_,
     FilterL1TileShape_,
     L0TileShape_,
@@ -52,18 +46,11 @@ struct BlockConv2d <
     OutputType_,
     BiasType_,
     TileCopy_,
-    TileMmad_
-> {
+    TileMmad_> {
 public:
     // Type Aliases
-    using DispatchPolicy = ConvAtlasA2Pingpong<
-        L1A_STAGES_,
-        L1B_STAGES_,
-        L0A_STAGES_,
-        L0B_STAGES_,
-        L0C_STAGES_,
-        ENABLE_UNIT_FLAG_
-    >;
+    using DispatchPolicy =
+        ConvAtlasA2Pingpong<L1A_STAGES_, L1B_STAGES_, L0A_STAGES_, L0B_STAGES_, L0C_STAGES_, ENABLE_UNIT_FLAG_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using FmapL1TileShape = FmapL1TileShape_;
     using FilterL1TileShape = FilterL1TileShape_;
@@ -93,14 +80,14 @@ public:
 
     static constexpr bool ENABLE_UNIT_FLAG = DispatchPolicy::ENABLE_UNIT_FLAG;
     static constexpr uint32_t MAX_STAGES = 2;
-    static constexpr uint32_t L1A_STAGES =
-        (DispatchPolicy::L1A_STAGES < MAX_STAGES) ? DispatchPolicy::L1A_STAGES : MAX_STAGES;
-    static constexpr uint32_t L1B_STAGES =
-        (DispatchPolicy::L1B_STAGES < MAX_STAGES) ? DispatchPolicy::L1B_STAGES : MAX_STAGES;
-    static constexpr uint32_t L0A_STAGES =
-        (DispatchPolicy::L0A_STAGES < MAX_STAGES) ? DispatchPolicy::L0A_STAGES : MAX_STAGES;
-    static constexpr uint32_t L0B_STAGES =
-        (DispatchPolicy::L0B_STAGES < MAX_STAGES) ? DispatchPolicy::L0B_STAGES : MAX_STAGES;
+    static constexpr uint32_t L1A_STAGES = (DispatchPolicy::L1A_STAGES < MAX_STAGES) ? DispatchPolicy::L1A_STAGES
+                                                                                     : MAX_STAGES;
+    static constexpr uint32_t L1B_STAGES = (DispatchPolicy::L1B_STAGES < MAX_STAGES) ? DispatchPolicy::L1B_STAGES
+                                                                                     : MAX_STAGES;
+    static constexpr uint32_t L0A_STAGES = (DispatchPolicy::L0A_STAGES < MAX_STAGES) ? DispatchPolicy::L0A_STAGES
+                                                                                     : MAX_STAGES;
+    static constexpr uint32_t L0B_STAGES = (DispatchPolicy::L0B_STAGES < MAX_STAGES) ? DispatchPolicy::L0B_STAGES
+                                                                                     : MAX_STAGES;
     static constexpr uint32_t L0A_SIZE = ArchTag::L0A_SIZE;
     static constexpr uint32_t L0B_SIZE = ArchTag::L0B_SIZE;
     static constexpr uint32_t L0C_SIZE = ArchTag::L0C_SIZE;
@@ -113,30 +100,31 @@ public:
     // Check L0TileShape
     static constexpr uint32_t L0B_TILE_SIZE = L0TileShape::K * L0TileShape::N * sizeof(ElementFilter);
     static_assert((L0B_TILE_SIZE * L0B_STAGES) <= L0B_SIZE, "L0TileShape exceeding the L0B space!");
-   
+
     static constexpr uint32_t ELE_NUM_A_PER_C0 = BYTE_PER_C0 / sizeof(ElementFmap);
     static constexpr uint32_t ELE_NUM_B_PER_C0 = BYTE_PER_C0 / sizeof(ElementFilter);
 
-    // Check big and small L1TileShape::Cin1 
+    // Check big and small L1TileShape::Cin1
     static_assert(
-        (FilterL1TileShape::Cin1 >= FmapL1TileShape::Cin1) &&
-        (FilterL1TileShape::Cin1 % FmapL1TileShape::Cin1 == 0),
-        "FilterL1TileShape::Cin1 must be a multiple of FmapL1TileShape::Cin1");
+        (FilterL1TileShape::Cin1 >= FmapL1TileShape::Cin1) && (FilterL1TileShape::Cin1 % FmapL1TileShape::Cin1 == 0),
+        "FilterL1TileShape::Cin1 must be a multiple of FmapL1TileShape::Cin1"
+    );
 
     static constexpr uint32_t K_FMAP_PER_FILTER = FilterL1TileShape::Cin1 / FmapL1TileShape::Cin1;
 
     /// Construct
     CATLASS_DEVICE
     BlockConv2d(Arch::Resource<ArchTag> &resource, const Conv2dFilterParams &filterParams_, uint32_t l1BufAddrStart = 0)
-        : filterParams(filterParams_), copyL1ToL0A(filterParams_)
+        : filterParams(filterParams_)
+        , copyL1ToL0A(filterParams_)
     {
-        hiBlock = (FmapL1TileShape::Ho - 1) * filterParams.strideH() +
-            (filterParams.kh() - 1) * filterParams.dilationH() + 1;
-        wiBlock = (FmapL1TileShape::Wo - 1) * filterParams.strideW() +
-            (filterParams.kw() - 1) * filterParams.dilationW() + 1;
+        hiBlock = (FmapL1TileShape::Ho - 1) * filterParams.strideH()
+                  + (filterParams.kh() - 1) * filterParams.dilationH() + 1;
+        wiBlock = (FmapL1TileShape::Wo - 1) * filterParams.strideW()
+                  + (filterParams.kw() - 1) * filterParams.dilationW() + 1;
         l1A_size = FmapL1TileShape::Cin1 * hiBlock * wiBlock * BYTE_PER_C0;
-        l1B_size = FilterL1TileShape::Cin1 * filterParams.kh() * filterParams.kw() * 
-            FilterL1TileShape::Cout * BYTE_PER_C0;
+        l1B_size = FilterL1TileShape::Cin1 * filterParams.kh() * filterParams.kw() * FilterL1TileShape::Cout
+                   * BYTE_PER_C0;
 
         uint32_t l1AOffset = l1BufAddrStart;
         uint32_t l1BOffset = l1BufAddrStart + l1A_size * L1A_STAGES;
@@ -170,7 +158,8 @@ public:
 
     /// Destructor
     CATLASS_DEVICE
-    ~BlockConv2d() {
+    ~BlockConv2d()
+    {
         for (uint32_t i = 0; i < MAX_STAGES; i++) {
             if (i < L1A_STAGES) {
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[i]);
@@ -183,7 +172,7 @@ public:
             }
             if (i < L0B_STAGES) {
                 AscendC::WaitFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[i]);
-            } 
+            }
         }
         AscendC::WaitFlag<AscendC::HardEvent::FIX_M>(EVENT_ID0);
     }
@@ -191,10 +180,15 @@ public:
     /// Perform a block-scoped matrix multiply-accumulate
     CATLASS_DEVICE
     void operator()(
-        AscendC::GlobalTensor<ElementFmap> const &gmFmap, LayoutFmap const &layoutFmap,
-        AscendC::GlobalTensor<ElementFilter> const &gmFilter, LayoutFilter const &layoutFilter,
-        AscendC::GlobalTensor<ElementOutput> const &gmOutput, LayoutOutput const &layoutOutput,
-        Conv2dCoord const &actualShape, uint8_t* blockPadList)
+        AscendC::GlobalTensor<ElementFmap> const &gmFmap,
+        LayoutFmap const &layoutFmap,
+        AscendC::GlobalTensor<ElementFilter> const &gmFilter,
+        LayoutFilter const &layoutFilter,
+        AscendC::GlobalTensor<ElementOutput> const &gmOutput,
+        LayoutOutput const &layoutOutput,
+        Conv2dCoord const &actualShape,
+        uint8_t *blockPadList
+    )
     {
         uint8_t blockPadLeft = blockPadList[0];
         uint8_t blockPadRight = blockPadList[1];
@@ -205,40 +199,46 @@ public:
         int32_t wiActualOrg = wiActual + blockPadLeft + blockPadRight;
         int32_t hiActualOrg = hiActual + blockPadTop + blockPadBottom;
 
-        uint32_t hoActual = (hiActualOrg - 1 - 
-            (filterParams.kh() - 1) * filterParams.dilationH()) / filterParams.strideH() + 1;
-        uint32_t woActual = (wiActualOrg - 1 -
-            (filterParams.kw() - 1) * filterParams.dilationW()) / filterParams.strideW() + 1;
+        uint32_t hoActual = (hiActualOrg - 1 - (filterParams.kh() - 1) * filterParams.dilationH())
+                                / filterParams.strideH()
+                            + 1;
+        uint32_t woActual = (wiActualOrg - 1 - (filterParams.kw() - 1) * filterParams.dilationW())
+                                / filterParams.strideW()
+                            + 1;
         uint32_t howoActual = hoActual * woActual;
 
         uint32_t howoRound = RoundUp<L1FmapAlignHelper::HOWO_ALIGNED>(howoActual);
         uint32_t coutRound = RoundUp<L1FilterAlignHelper::COUT_ALIGNED>(actualShape.cout());
-        
+
         uint32_t nL0 = Min(RoundUp<C0_NUM_PER_FRACTAL>(L0TileShape::N), coutRound);
         uint32_t nPartLoop = CeilDiv(coutRound, nL0);
         uint32_t cin1L0Tile = Max(L0TileShape::K / (filterParams.kh() * filterParams.kw() * ELE_NUM_A_PER_C0), 1U);
-        
+
         auto layoutFmapInL1 = LayoutFmapInL1::template MakeLayout<ElementFmap>(
-            (uint32_t)1, FmapL1TileShape::Cin1, hiActual, wiActual, ELE_NUM_A_PER_C0);
+            (uint32_t)1, FmapL1TileShape::Cin1, hiActual, wiActual, ELE_NUM_A_PER_C0
+        );
         auto layoutFilterInL1 = LayoutFilterInL1::template MakeLayout<ElementFilter>(
-            FilterL1TileShape::Cin1, filterParams.kh(), filterParams.kw(), coutRound, ELE_NUM_B_PER_C0);
+            FilterL1TileShape::Cin1, filterParams.kh(), filterParams.kw(), coutRound, ELE_NUM_B_PER_C0
+        );
         auto layoutInL0C = LayoutOutputInL0::MakeLayoutInL0C(MakeCoord(howoRound, coutRound));
-    
+
         uint32_t cin1Actual = min(actualShape.cin1(), FmapL1TileShape::Cin1);
         uint32_t cin1FilterActual = min(actualShape.cin1(), FilterL1TileShape::Cin1);
-       
+
         // load first Fmap tile from GM to L1
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
         auto layoutTileFmap = layoutFmap.GetTileLayout(
-            MakeCoord((uint32_t)1, cin1Actual, hiActual, wiActual, ELE_NUM_A_PER_C0));
+            MakeCoord((uint32_t)1, cin1Actual, hiActual, wiActual, ELE_NUM_A_PER_C0)
+        );
         copyGmToL1A(l1ATensorList[l1AListId], gmFmap, layoutFmapInL1, layoutTileFmap);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListId]);
 
         // load first Filter tile from GM to L1
         AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
-        auto layoutTileFilter = layoutFilter.GetTileLayout(
-            MakeCoord(cin1FilterActual, (uint32_t)filterParams.kh(), (uint32_t)filterParams.kw(),
-                      actualShape.cout(), ELE_NUM_B_PER_C0));
+        auto layoutTileFilter = layoutFilter.GetTileLayout(MakeCoord(
+            cin1FilterActual, (uint32_t)filterParams.kh(), (uint32_t)filterParams.kw(), actualShape.cout(),
+            ELE_NUM_B_PER_C0
+        ));
         copyGmToL1B(l1BTensorList[l1BListId], gmFilter, layoutFilterInL1, layoutTileFilter);
         AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListId]);
 
@@ -247,12 +247,10 @@ public:
         }
 
         // main loop
-        uint32_t cin1TileCnt =
-            CeilDiv<FmapL1TileShape::Cin1>(actualShape.cin1());
-        uint32_t cin1FilterTileCnt =
-            CeilDiv<FilterL1TileShape::Cin1>(actualShape.cin1());
+        uint32_t cin1TileCnt = CeilDiv<FmapL1TileShape::Cin1>(actualShape.cin1());
+        uint32_t cin1FilterTileCnt = CeilDiv<FilterL1TileShape::Cin1>(actualShape.cin1());
         for (uint32_t cin1LoopIdx = 0; cin1LoopIdx < cin1TileCnt; cin1LoopIdx++) {
-            uint32_t  cin1FmapIdx = cin1LoopIdx % K_FMAP_PER_FILTER;
+            uint32_t cin1FmapIdx = cin1LoopIdx % K_FMAP_PER_FILTER;
 
             uint32_t l1AListIdNext = (l1AListId + 1 < L1A_STAGES) ? (l1AListId + 1) : 0;
             uint32_t l1BListIdNext = (l1BListId + 1 < L1B_STAGES) ? (l1BListId + 1) : 0;
@@ -263,9 +261,10 @@ public:
             // preload next tile A from GM to L1
             if (cin1LoopIdx < cin1TileCnt - 1) {
                 uint32_t cin1LoopIdxNext = cin1LoopIdx + 1;
-                cin1ActualNext = (cin1LoopIdxNext < cin1TileCnt - 1) ?
-                    FmapL1TileShape::Cin1 : (actualShape.cin1() - cin1LoopIdxNext * FmapL1TileShape::Cin1);
-                
+                cin1ActualNext = (cin1LoopIdxNext < cin1TileCnt - 1)
+                                     ? FmapL1TileShape::Cin1
+                                     : (actualShape.cin1() - cin1LoopIdxNext * FmapL1TileShape::Cin1);
+
                 // Get L1 tensor A for next stage
                 auto l1ATensor = l1ATensorList[l1AListIdNext];
                 // Get GM tile A for next stage
@@ -275,16 +274,18 @@ public:
                 // load next Fmap tile from GM to L1
                 AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListIdNext]);
                 layoutTileFmap = layoutFmap.GetTileLayout(
-                    MakeCoord((uint32_t)1, cin1ActualNext, hiActual, wiActual, ELE_NUM_A_PER_C0));
+                    MakeCoord((uint32_t)1, cin1ActualNext, hiActual, wiActual, ELE_NUM_A_PER_C0)
+                );
                 copyGmToL1A(l1ATensor, gmTileFmap, layoutFmapInL1, layoutTileFmap);
                 AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1AEventList[l1AListIdNext]);
 
                 // preload next tile B from GM to L1
                 if (cin1FmapIdx == K_FMAP_PER_FILTER - 1) {
                     uint32_t cin1FilterIdxNext = cin1LoopIdxNext / K_FMAP_PER_FILTER;
-                    cin1FilterActualNext = (cin1FilterIdxNext < cin1FilterTileCnt - 1) ?
-                        FilterL1TileShape::Cin1 : (actualShape.cin1() - cin1FilterIdxNext * FilterL1TileShape::Cin1);
-                
+                    cin1FilterActualNext = (cin1FilterIdxNext < cin1FilterTileCnt - 1)
+                                               ? FilterL1TileShape::Cin1
+                                               : (actualShape.cin1() - cin1FilterIdxNext * FilterL1TileShape::Cin1);
+
                     // Get L1 tensor B for next stage
                     auto l1BTensor = l1BTensorList[l1BListIdNext];
                     // Get GM tile B for next stage
@@ -293,9 +294,10 @@ public:
 
                     // load next Filter tile from GM to L1
                     AscendC::WaitFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListIdNext]);
-                    auto layoutTileFilter = layoutFilter.GetTileLayout(
-                        MakeCoord(cin1FilterActualNext, (uint32_t)filterParams.kh(), (uint32_t)filterParams.kw(),
-                                actualShape.cout(), ELE_NUM_B_PER_C0));
+                    auto layoutTileFilter = layoutFilter.GetTileLayout(MakeCoord(
+                        cin1FilterActualNext, (uint32_t)filterParams.kh(), (uint32_t)filterParams.kw(),
+                        actualShape.cout(), ELE_NUM_B_PER_C0
+                    ));
                     copyGmToL1B(l1BTensor, gmTileFilter, layoutFilterInL1, layoutTileFilter);
                     AscendC::SetFlag<AscendC::HardEvent::MTE2_MTE1>(l1BEventList[l1BListIdNext]);
                 }
@@ -309,10 +311,9 @@ public:
             uint32_t kPartLoop = CeilDiv(cin1Actual, cin1L0Tile);
 
             for (int kPartIdx = 0; kPartIdx < kPartLoop; kPartIdx++) {
-                uint32_t cin1PartActual = (kPartIdx < kPartLoop - 1) ?
-                    cin1L0Tile : (cin1Actual - kPartIdx * cin1L0Tile);
-                uint32_t kPartActual = 
-                    cin1PartActual * filterParams.kh() * filterParams.kw() * ELE_NUM_A_PER_C0;
+                uint32_t cin1PartActual = (kPartIdx < kPartLoop - 1) ? cin1L0Tile
+                                                                     : (cin1Actual - kPartIdx * cin1L0Tile);
+                uint32_t kPartActual = cin1PartActual * filterParams.kh() * filterParams.kw() * ELE_NUM_A_PER_C0;
 
                 // Locate the current tile on L0A
                 auto l0ATile = l0ATensorList[l0AListId];
@@ -329,22 +330,21 @@ public:
 
                 // Load current tile from L1 to L0A
                 copyL1ToL0A(l0ATile, l1ATile, layoutFmapInL0, layoutFmapInL1, blockPadList);
-                
+
                 if (kPartIdx == kPartLoop - 1) {
                     AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1AEventList[l1AListId]);
                 }
 
                 for (int nPartIdx = 0; nPartIdx < nPartLoop; nPartIdx++) {
-                    uint32_t nPartActual = (nPartIdx < nPartLoop - 1) ?
-                        nL0 : (coutRound - nPartIdx * nL0);
+                    uint32_t nPartActual = (nPartIdx < nPartLoop - 1) ? nL0 : (coutRound - nPartIdx * nL0);
 
                     // Locate the current tile on L0B
                     auto l0BTile = l0BTensorList[l0BListId];
-                    LayoutFilterInL0 layoutFilterInL0 = LayoutFilterInL0::template MakeLayout<ElementFilter>(kPartActual, nPartActual);
+                    LayoutFilterInL0 layoutFilterInL0 =
+                        LayoutFilterInL0::template MakeLayout<ElementFilter>(kPartActual, nPartActual);
                     // Load current tile of matrix B on L1
                     Conv2dFilterCoord l1BOffset{
-                        cin1FmapIdx * FmapL1TileShape::Cin1 + kPartIdx * cin1L0Tile,
-                        0, 0, nPartIdx * nL0, 0};
+                        cin1FmapIdx * FmapL1TileShape::Cin1 + kPartIdx * cin1L0Tile, 0, 0, nPartIdx * nL0, 0};
                     auto l1BTile = l1BTensor[layoutFilterInL1.GetOffset(l1BOffset)];
 
                     // Wait for mmad finished
@@ -355,9 +355,9 @@ public:
 
                     // Load current tile from L1 to L0B
                     copyL1ToL0B(l0BTile, l1BTile, layoutFilterInL0, layoutFilterInL1);
-                    
-                    if (((cin1FmapIdx == K_FMAP_PER_FILTER - 1) || (cin1LoopIdx == cin1TileCnt - 1)) &&
-                        (kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
+
+                    if (((cin1FmapIdx == K_FMAP_PER_FILTER - 1) || (cin1LoopIdx == cin1TileCnt - 1))
+                        && (kPartIdx == kPartLoop - 1) && (nPartIdx == nPartLoop - 1)) {
                         AscendC::SetFlag<AscendC::HardEvent::MTE1_MTE2>(l1BEventList[l1BListId]);
                     }
 
@@ -384,10 +384,7 @@ public:
                         }
                     }
                     // Perfrom calculation operations
-                    tileMmad(
-                        l0CTile, l0ATile, l0BTile,
-                        howoRound, nPartActual, kPartActual,
-                        initC, unitFlag);
+                    tileMmad(l0CTile, l0ATile, l0BTile, howoRound, nPartActual, kPartActual, initC, unitFlag);
 
                     // Notify to move the next L0A, L0B tile
                     AscendC::SetFlag<AscendC::HardEvent::M_MTE1>(l0BEventList[l0BListId]);
@@ -407,7 +404,8 @@ public:
         // copy block out
         uint32_t cout1Actual = coutRound / ELE_NUM_A_PER_C0;
         LayoutOutput layoutBlock = layoutOutput.GetTileLayout(
-            MakeCoord((uint32_t)1, cout1Actual, hoActual, woActual, ELE_NUM_A_PER_C0));
+            MakeCoord((uint32_t)1, cout1Actual, hoActual, woActual, ELE_NUM_A_PER_C0)
+        );
 
         if constexpr (!ENABLE_UNIT_FLAG) {
             AscendC::SetFlag<AscendC::HardEvent::M_FIX>(EVENT_ID0);

@@ -14,25 +14,14 @@ if (BUILD_OPEN_PROJECT)
         OP_NAME ChunkGatedDeltaRuleBwdDhu
         OPTIONS --cce-auto-sync=on
                 -Wno-deprecated-declarations
-                -Werror
     )
-    if("${ASCEND_COMPUTE_UNIT}" STREQUAL "ascend910_95")
+    if("${ASCEND_COMPUTE_UNIT}" STREQUAL "ascend950")
         add_ops_compile_options(
             OP_NAME ChunkGatedDeltaRuleBwdDhu
-            COMPUTE_UNIT ascend910_9599
+            COMPUTE_UNIT ascend950PR_9599
             OPTIONS -mllvm -cce-aicore-dcci-before-kernel-end=false
         )
     endif()
-endif()
-
-set(CONDITION_UNIT ${ASCEND_COMPUTE_UNIT})
-if("${CONDITION_UNIT}" STREQUAL "ascend910_95")
-    set(gdr_depends chunk_gated_delta_rule/common CACHE INTERNAL "Dependencies for gdr")
-    add_ops_compile_options(
-        OP_NAME ChunkGatedDeltaRuleBwdDhu
-        COMPUTE_UNIT ascend910_9599
-        OPTIONS -DENABLE_CV_COMM_VIA_SSBUF=true
-    )
 endif()
 
 add_modules_sources(OPTYPE chunk_gated_delta_rule_bwd_dhu ACLNNTYPE aclnn_exclude)

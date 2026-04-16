@@ -1,9 +1,11 @@
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 # useage: add_modules_sources(DIR OPTYPE ACLNNTYPE)
@@ -99,6 +101,9 @@ function(add_opapi_modules)
       $<BUILD_INTERFACE:adump_headers>
       $<BUILD_INTERFACE:dlog_headers>)
   endif()
+  if(NOT BUILD_OPEN_PROJECT)
+    add_dependencies(${OPHOST_NAME}_opapi_obj opbuild_gen_inner)
+  endif()
 endfunction()
 
 # 添加gentask object
@@ -148,6 +153,9 @@ function(add_opmaster_ct_gentask_modules)
         error_manager
         ops_utils_tiling
       -Wl,--as-needed
+      -Wl,--whole-archive
+        tiling_api
+      -Wl,--no-whole-archive
         c_sec
         json
         platform
@@ -210,7 +218,7 @@ function(add_aicpu_cust_kernel_modules target_name)
       PRIVATE $<BUILD_INTERFACE:$<IF:$<BOOL:${ENABLE_TEST}>,intf_llt_pub_asan_cxx17,intf_pub_cxx17>>
               $<BUILD_INTERFACE:dlog_headers>
               -Wl,--no-whole-archive
-              Eigen3::EigenCv
+              Eigen3::EigenTransformer
       )
     if (NOT ${target_name} IN_LIST AICPU_CUST_OBJ_TARGETS)
       set(AICPU_CUST_OBJ_TARGETS ${AICPU_CUST_OBJ_TARGETS} ${target_name} CACHE INTERNAL "All aicpu cust obj targets")
@@ -223,7 +231,7 @@ endfunction()
 # OPTYPE 和 ACLNNTYPE 需一一对应
 macro(add_modules_sources)
   set(oneValueArgs OP_API_INDEPENDENT OP_API_DIR)
-  set(multiValueArgs OPTYPE ACLNNTYPE)
+  set(multiValueArgs OPTYPE ACLNNTYPE ACLNN_EXTRA_VERSION)
 
   cmake_parse_arguments(MODULE "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})

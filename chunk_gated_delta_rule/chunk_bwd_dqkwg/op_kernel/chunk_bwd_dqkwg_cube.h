@@ -14,6 +14,8 @@
 #ifndef CHUNK_BWD_DQKWG_CUBE_H
 #define CHUNK_BWD_DQKWG_CUBE_H
 
+#if defined(__CCE_AICORE__) && __CCE_AICORE__ == 310
+    #define CATLASS_ARCH 3510
 #include "chunk_bwd_dqkwg_common.h"
 #include "catlass/arch/arch.hpp"
 #include "catlass/catlass.hpp"
@@ -26,7 +28,40 @@
 #include "catlass/status.hpp"
 #include "tla/layout.hpp"
 #include "tla/tensor.hpp"
-
+ using _0 = tla::Int<0>;
+ 	 using _1 = tla::Int<1>;
+ 	 using _2 = tla::Int<2>;
+ 	 using _4 = tla::Int<4>;
+ 	 using _8 = tla::Int<8>;
+ 	 using _16 = tla::Int<16>;
+ 	 using _32 = tla::Int<32>;
+ 	 using _64 = tla::Int<64>;
+ 	 using _128 = tla::Int<128>;
+ 	 using _256 = tla::Int<256>;
+ 	 using _512 = tla::Int<512>;
+ 	 using _1024 = tla::Int<1024>;
+ 	 using _2048 = tla::Int<2048>;
+ 	 using _4096 = tla::Int<4096>;
+ 	 using _8192 = tla::Int<8192>;
+ 	 using _16384 = tla::Int<16384>;
+ 	 using _32768 = tla::Int<32768>;
+ 	 using _65536 = tla::Int<65536>;
+ 	 #else
+ 	 #define CATLASS_ARCH 2201
+ 	 #include "chunk_bwd_dqkwg_common.h"
+ 	 #include "catlass/arch/arch.hpp"
+ 	 #include "catlass/catlass.hpp"
+ 	 #include "catlass/gemm/block/block_mmad.hpp"
+ 	 #include "catlass/gemm/block/block_swizzle.hpp"
+ 	 #include "catlass/gemm/device/device_gemm.hpp"
+ 	 #include "catlass/gemm/dispatch_policy.hpp"
+ 	 #include "catlass/gemm/gemm_type.hpp"
+ 	 #include "catlass/layout/layout.hpp"
+ 	 #include "catlass/status.hpp"
+ 	 #include "tla/layout.hpp"
+ 	 #include "tla/tensor.hpp"
+ 	 #endif
+using namespace tla;
 using namespace Catlass;
 using namespace AscendC;
 
@@ -708,7 +743,12 @@ __aicore__ inline void ChunkBwdDqkwgCubeProcess<DataType, GType>::Process() {
     using LayoutColMajor = layout::ColumnMajor;
     
     // 架构和策略定义
-    using ArchTag = Arch::AtlasA2;
+ #if defined(__CCE_AICORE__) && __CCE_AICORE__ == 310
+ 	     using ArchTag = Arch::Ascend950;
+ 	 #else
+ 	     using ArchTag = Arch::AtlasA2;
+ 	 #endif
+ 	     using DispatchPolicy = Gemm::MmadPingpong<ArchTag, true, false>;
     using DispatchPolicy = Gemm::MmadPingpong<ArchTag, true>;
     using L1TileShape = tla::Shape<_128, _128, _256>;
     using L0TileShape = tla::Shape<_128, _128, _128>;

@@ -1,38 +1,58 @@
 # -----------------------------------------------------------------------------------------------------------
-# Copyright (c) 2025 Tianjin University, Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
 # THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 # INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
 # useage: add_modules_sources(DIR OPTYPE ACLNNTYPE)
 # ACLNNTYPE 支持类型aclnn/aclnn_inner/aclnn_exclude
+# ACLNNEXTRAVERSION 算子版本(ex., v2, v3, v5, etc.)
 # OPTYPE 和 ACLNNTYPE 需一一对应
 
 # 用于custom自定算子包host侧obj生成
 macro(add_modules_sources)
-  set(oneValueArgs OP_API_INDEPENDENT OP_API_DIR)
-  set(multiValueArgs OPTYPE ACLNNTYPE)
+  set(oneValueArgs OP_API_INDEPENDENT OP_API_DIR OP_MC2_ENABLE)
+  set(multiValueArgs OPTYPE ACLNNTYPE ACLNN_EXTRA_VERSION)
 
   cmake_parse_arguments(MODULE "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+
+  if (NOT DEFINED MODULE_OP_MC2_ENABLE)
+    set(MODULE_OP_MC2_ENABLE OFF)
+  endif()
 
   # 该段代码作用为兼容op_api新旧目录结构(旧： 嵌套于op_host下； 新： 与op_host同级)
   if (NOT DEFINED MODULE_OP_API_INDEPENDENT)
     set(MODULE_OP_API_INDEPENDENT OFF)
   endif()
-    if(MODULE_OP_API_INDEPENDENT)
-      # 新结构：op_api与op_host同级，需要指定有效路径
-      if (NOT DEFINED MODULE_OP_API_DIR OR NOT EXISTS "${MODULE_OP_API_DIR}")
-        message(FATAL_ERROR "OP_API_INDEPENDENT=ON时，必须传递有效的OP_API_DIR路径")
-      endif()
-      set(OP_API_SRC_DIR "${MODULE_OP_API_DIR}")
-    else()
-      # 旧结构：op_api嵌套在op_host目录下
-      set(OP_API_SRC_DIR "${SOURCE_DIR}/op_api")
+  if(MODULE_OP_API_INDEPENDENT)
+    # 新结构：op_api与op_host同级，需要指定有效路径
+    if (NOT DEFINED MODULE_OP_API_DIR OR NOT EXISTS "${MODULE_OP_API_DIR}")
+      message(FATAL_ERROR "OP_API_INDEPENDENT=ON时，必须传递有效的OP_API_DIR路径")
+    endif()
+    set(OP_API_SRC_DIR "${MODULE_OP_API_DIR}")
+  else()
+    # 旧结构：op_api嵌套在op_host目录下
+    set(OP_API_SRC_DIR "${SOURCE_DIR}/op_api")
   endif()
 
+  if (MODULE_OP_MC2_ENABLE)
+    set(COMPILED_OPS ${COMPILED_OPS} ${OP_NAME} CACHE STRING "Compiled Ops" FORCE)
+    set(COMPILED_OP_DIRS ${COMPILED_OP_DIRS} ${PARENT_DIR} CACHE STRING "Compiled Ops Dirs" FORCE)
+  endif()
+
+  add_opbase_modules()
+
+  list(LENGTH MODULE_OPTYPE OpTypeLen)
+  list(LENGTH MODULE_ACLNN_EXTRA_VERSION AclnnExtraVersionLen)
+  if((AclnnExtraVersionLen GREATER 1) AND (OpTypeLen GREATER 1))
+    message(FATAL_ERROR "There should be only 1 optype if there are more than 1 aclnn extra versions!")
+  endif()
+  
   # opapi 默认全部编译
   file(GLOB OPAPI_SRCS ${OP_API_SRC_DIR}/*.cpp)
   if (OPAPI_SRCS)
@@ -50,9 +70,12 @@ macro(add_modules_sources)
       )
     endif()
   endif()
-  file(GLOB OPAPI_HEADERS ${OP_API_SRC_DIR}/aclnn_*.h)
-  if (OPAPI_HEADERS)
-    target_sources(${OPHOST_NAME}_aclnn_exclude_headers INTERFACE ${OPAPI_HEADERS})
+
+  if (NOT MODULE_OP_MC2_ENABLE)
+    file(GLOB OPAPI_HEADERS ${OP_API_SRC_DIR}/aclnn_*.h)
+    if (OPAPI_HEADERS)
+      target_sources(${OPHOST_NAME}_aclnn_exclude_headers INTERFACE ${OPAPI_HEADERS})
+    endif()
   endif()
 
   # 是否编译该算子已经由op_add_subdirectory和每个二级目录判断完毕，默认走到这里全编
@@ -90,10 +113,14 @@ macro(add_modules_sources)
     # target_include_directories(${OPHOST_NAME}_tiling_obj PRIVATE ${SOURCE_DIR}/../../ ${SOURCE_DIR})
   endif()
 
-  file(GLOB AICPU_SRCS ${SOURCE_DIR}/*_aicpu*.cpp)
-  if(AICPU_SRCS)
-    add_aicpu_kernel_modules()
-    target_sources(${OPHOST_NAME}_aicpu_obj PRIVATE ${AICPU_SRCS})
+  if (MODULE_OP_MC2_ENABLE)
+    file(GLOB GENTASK_SRCS
+        ${SOURCE_DIR}/../op_graph/*_gen_task*.cpp
+    )
+    if(GENTASK_SRCS)
+      add_gentask_modules()
+      target_sources(${OPGRAPH_NAME}_gentask_obj PRIVATE ${GENTASK_SRCS})
+    endif()
   endif()
 
   if (MODULE_OPTYPE)
@@ -111,6 +138,9 @@ macro(add_modules_sources)
 
         if (OPDEF_SRCS)
           target_sources(${OPHOST_NAME}_opdef_${AclnnType}_obj INTERFACE ${OPDEF_SRCS})
+        endif()
+        if(AclnnExtraVersionLen GREATER 0)
+          concat_op_names(OPTYPE ${OpType} ACLNNTYPE ${AclnnType} ACLNN_EXTRA_VERSION ${MODULE_ACLNN_EXTRA_VERSION})
         endif()
       elseif(${AclnnType} STREQUAL "no_need_aclnn")
         message(STATUS "aicpu or host aicpu no need aclnn.")
@@ -254,103 +284,6 @@ macro(add_modules_sources_with_soc)
   endif()
 endmacro()
 
-macro(add_mc2_modules_sources)
-  set(multiValueArgs OPTYPE ACLNNTYPE)
-
-  cmake_parse_arguments(MODULE "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-  set(SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-
-  #opapi 默认全部编译
-  file(GLOB OPAPI_SRCS ${SOURCE_DIR}/../op_api/*.cpp)
-  if (OPAPI_SRCS)
-    # aclnn
-    add_opapi_modules()
-    target_sources(${OPHOST_NAME}_opapi_obj PRIVATE ${OPAPI_SRCS})
-  endif()
-
-  # 获取算子层级目录名称，判断是否编译该算子
-  get_filename_component(PARENT_DIR ${SOURCE_DIR} DIRECTORY)
-  get_filename_component(OP_NAME ${PARENT_DIR} NAME)
-  list(FIND ASCEND_OP_NAME ${OP_NAME} INDEX)
-  # 记录全局的COMPILED_OPS和COMPILED_OP_DIRS，其中COMPILED_OP_DIRS只记录到算子名，例如moe/moe_token_permute_with_routing_map_grad
-  set(COMPILED_OPS ${COMPILED_OPS} ${OP_NAME} CACHE STRING "Compiled Ops" FORCE)
-  set(COMPILED_OP_DIRS ${COMPILED_OP_DIRS} ${PARENT_DIR} CACHE STRING "Compiled Ops Dirs" FORCE)
-  
-  file(GLOB OPINFER_SRCS ${SOURCE_DIR}/*_infershape*.cpp)
-  if (OPINFER_SRCS)
-    # proto
-    add_infer_modules()
-    target_sources(${OPHOST_NAME}_infer_obj PRIVATE ${OPINFER_SRCS})
-  endif()
-
-  file(GLOB_RECURSE OPTILING_SRCS
-      ${SOURCE_DIR}/op_tiling/*.cpp
-      ${SOURCE_DIR}/op_tiling/arch35/*.cpp
-      ${SOURCE_DIR}/op_tiling/common/*.cpp
-      ${SOURCE_DIR}/../op_graph/fallback*.cpp
-  )
-  if (OPTILING_SRCS)
-    # tiling
-    add_tiling_modules()
-    target_sources(${OPHOST_NAME}_tiling_obj PRIVATE 
-      ${OPTILING_SRCS}
-      ${OPS_TRANSFORMER_DIR}/mc2/common/src/matmul_formulaic_tiling.cpp
-      ${OPS_TRANSFORMER_DIR}/mc2/common/src/mc2_tiling_utils.cpp
-      ${OPS_TRANSFORMER_DIR}/mc2/common/src/mc2_matmul_tiling_cfg.cpp
-      ${OPS_TRANSFORMER_DIR}/mc2/common/src/mc2_log.cpp
-      ${OPS_TRANSFORMER_DIR}/mc2/3rd/ops_legacy/op_tiling/op_cache_tiling.cpp
-      ${OPS_TRANSFORMER_DIR}/mc2/3rd/ops_legacy/op_tiling/runtime_kb_api.cpp
-    )
-  endif()
-
-  file(GLOB GENTASK_SRCS
-      ${SOURCE_DIR}/../op_graph/*_gen_task*.cpp
-  )
-  if(GENTASK_SRCS)
-    add_opmaster_ct_gentask_modules()
-    target_sources(${OPHOST_NAME}_opmaster_ct_gentask_obj PRIVATE ${GENTASK_SRCS})
-  endif()
-
-  file(GLOB AICPU_SRCS ${SOURCE_DIR}/*_aicpu*.cpp)
-  if(AICPU_SRCS)
-    add_aicpu_kernel_modules()
-    target_sources(${OPHOST_NAME}_aicpu_obj PRIVATE ${AICPU_SRCS})
-  endif()
-
-  if (MODULE_OPTYPE)
-    list(LENGTH MODULE_OPTYPE OpTypeLen)
-    list(LENGTH MODULE_ACLNNTYPE AclnnTypeLen)
-    if(NOT ${OpTypeLen} EQUAL ${AclnnTypeLen})
-      message(FATAL_ERROR "OPTYPE AND ACLNNTYPE Should be One-to-One")
-    endif()
-    math(EXPR index "${OpTypeLen} - 1")
-    foreach(i RANGE ${index})
-      list(GET MODULE_OPTYPE ${i} OpType)
-      list(GET MODULE_ACLNNTYPE ${i} AclnnType)
-      if (${AclnnType} STREQUAL "aclnn" OR ${AclnnType} STREQUAL "aclnn_inner" OR ${AclnnType} STREQUAL "aclnn_exclude")
-        file(GLOB OPDEF_SRCS ${SOURCE_DIR}/${OpType}_def*.cpp)
-
-        if (OPDEF_SRCS)
-          target_sources(${OPHOST_NAME}_opdef_${AclnnType}_obj INTERFACE ${OPDEF_SRCS})
-        endif()
-      elseif(${AclnnType} STREQUAL "no_need_aclnn")
-        message(STATUS "aicpu or host aicpu no need aclnn.")
-      else()
-        message(FATAL_ERROR "ACLNN TYPE UNSPPORTED, ONLY SUPPORT aclnn/aclnn_inner/aclnn_exclude")
-      endif()
-    endforeach()
-  else()
-    file(GLOB OPDEF_SRCS ${SOURCE_DIR}/*_def*.cpp)
-    if(OPDEF_SRCS)
-      message(FATAL_ERROR
-      "Should Manually specify aclnn/aclnn_inner/aclnn_exclude\n"
-      "usage: add_modules_sources(OPTYPE optypes ACLNNTYPE aclnntypes)\n"
-      "example: add_modules_sources(OPTYPE add ACLNNTYPE aclnn_exclude)"
-      )
-    endif()
-  endif()
-endmacro()
-
 # 添加opapi object
 function(add_opapi_modules)
   if (NOT TARGET ${OPHOST_NAME}_opapi_obj)
@@ -373,7 +306,9 @@ function(add_opapi_modules)
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/${SYSTEM_PREFIX}/include/op_common/op_host>>
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/include/experiment/hccl/external>>
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/${SYSTEM_PREFIX}/pkg_inc/profiling>>
-      ${OPS_TRANSFORMER_DIR}/mc2/common/inc
+      ${OPS_TRANSFORMER_DIR}/mc2/common/utils
+      ${OPS_TRANSFORMER_DIR}/mc2/common/op_host/op_tiling
+      ${OPS_TRANSFORMER_DIR}/mc2/common/op_kernel
       ${OPS_TRANSFORMER_DIR}/mc2/3rd
     )
     target_compile_definitions(${OPHOST_NAME}_opapi_obj PRIVATE
@@ -394,6 +329,7 @@ function(add_opapi_modules)
       -Wl,--no-whole-archive
       $<$<BOOL:${dlog_FOUND}>:$<BUILD_INTERFACE:dlog_headers>>
       nnopbase
+      -Wl,-Bsymbolic
       profapi
       ge_common_base
       ascend_dump
@@ -413,9 +349,80 @@ set(INFER_OBJ_INCLUDE
   $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/include/experiment/metadef/common/util>>
   $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/include/external>>
   $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/pkg_inc/base>>
-  ${OPS_TRANSFORMER_DIR}/mc2/common/inc
+  ${OPS_TRANSFORMER_DIR}/mc2/common/utils
+  ${OPS_TRANSFORMER_DIR}/mc2/common/op_host/op_tiling
+  ${OPS_TRANSFORMER_DIR}/mc2/common/op_kernel
   ${OPS_TRANSFORMER_DIR}/mc2/3rd
 )
+
+# 添加opbase object
+function(add_opbase_modules)
+  if(TARGET opbase_infer_objs OR TARGET opbase_tiling_objs OR TARGET opbase_util_objs)
+    return()
+  endif()
+  file(GLOB_RECURSE OPS_BASE_INFER_SRC
+    ${OPBASE_SOURCE_PATH}/src/op_common/op_host/infershape_broadcast_util.cpp
+    ${OPBASE_SOURCE_PATH}/src/op_common/op_host/infershape_elewise_util.cpp
+    ${OPBASE_SOURCE_PATH}/src/op_common/op_host/infershape_reduce_util.cpp
+  )
+
+  file(GLOB_RECURSE OPS_BASE_TILING_SRC
+    ${OPBASE_SOURCE_PATH}/src/op_common/atvoss/elewise/*.cpp
+    ${OPBASE_SOURCE_PATH}/src/op_common/atvoss/broadcast/*.cpp
+    ${OPBASE_SOURCE_PATH}/src/op_common/atvoss/reduce/*.cpp
+  )
+
+  file(GLOB_RECURSE OPS_BASE_UTIL_SRC
+    ${OPBASE_SOURCE_PATH}/src/op_common/op_host/util/*.cpp
+    ${OPBASE_SOURCE_PATH}/src/op_common/log/*.cpp
+  )
+
+  if(OPS_BASE_INFER_SRC)
+    add_library(opbase_infer_objs OBJECT ${OPS_BASE_INFER_SRC})
+    target_include_directories(opbase_infer_objs PRIVATE ${OP_PROTO_INCLUDE})
+    target_compile_options(opbase_infer_objs
+        PRIVATE
+        $<$<NOT:$<BOOL:${ENABLE_TEST}>>:-DDISABLE_COMPILE_V1> -Dgoogle=ascend_private
+        -fvisibility=hidden
+    )
+    target_link_libraries(
+      opbase_infer_objs
+      PRIVATE $<BUILD_INTERFACE:$<IF:$<BOOL:${ENABLE_TEST}>,intf_llt_pub_asan_cxx17,intf_pub_cxx17>>
+              $<BUILD_INTERFACE:dlog_headers>
+      )
+  endif()
+
+  if(OPS_BASE_TILING_SRC)
+    add_library(opbase_tiling_objs OBJECT ${OPS_BASE_TILING_SRC})
+    target_include_directories(opbase_tiling_objs PRIVATE ${OP_TILING_INCLUDE})
+    target_compile_options(opbase_tiling_objs
+        PRIVATE
+        $<$<NOT:$<BOOL:${ENABLE_TEST}>>:-DDISABLE_COMPILE_V1> -Dgoogle=ascend_private
+                                        -fvisibility=hidden -fno-strict-aliasing
+    )
+    target_link_libraries(
+      opbase_tiling_objs
+      PRIVATE $<BUILD_INTERFACE:$<IF:$<BOOL:${ENABLE_TEST}>,intf_llt_pub_asan_cxx17,intf_pub_cxx17>>
+              $<BUILD_INTERFACE:dlog_headers>
+              tiling_api
+      )
+  endif()
+
+  if(OPS_BASE_UTIL_SRC)
+    add_library(opbase_util_objs OBJECT ${OPS_BASE_UTIL_SRC})
+    target_include_directories(opbase_util_objs PRIVATE ${OP_TILING_INCLUDE})
+    target_compile_options(opbase_util_objs
+        PRIVATE
+        $<$<NOT:$<BOOL:${ENABLE_TEST}>>:-DDISABLE_COMPILE_V1> -Dgoogle=ascend_private
+        -fvisibility=hidden
+    )
+    target_link_libraries(
+      opbase_util_objs
+      PRIVATE $<BUILD_INTERFACE:$<IF:$<BOOL:${ENABLE_TEST}>,intf_llt_pub_asan_cxx17,intf_pub_cxx17>>
+              $<BUILD_INTERFACE:dlog_headers>
+      )
+  endif()
+endfunction()
 
 # 添加infer object
 function(add_infer_modules)
@@ -471,11 +478,14 @@ function(add_tiling_modules)
       $<BUILD_INTERFACE:${OPS_TRANSFORMER_DIR}/common/include>
       
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/include/experiment>>
+      $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/include/version>>
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/${SYSTEM_PREFIX}/include/op_common/op_host>>
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/include/experiment/metadef/common/util>>
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/include/experiment>>
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/pkg_inc/profiling>>
-      ${OPS_TRANSFORMER_DIR}/mc2/common/inc
+      ${OPS_TRANSFORMER_DIR}/mc2/common/utils
+      ${OPS_TRANSFORMER_DIR}/mc2/common/op_host/op_tiling
+      ${OPS_TRANSFORMER_DIR}/mc2/common/op_kernel
       ${OPS_TRANSFORMER_DIR}/mc2/3rd
     )
     target_compile_definitions(${OPHOST_NAME}_tiling_obj
@@ -534,43 +544,46 @@ function(add_graph_plugin_modules)
       ${GRAPH_PLUGIN_NAME}_obj
       PRIVATE $<BUILD_INTERFACE:$<IF:$<BOOL:${ENABLE_TEST}>,intf_llt_pub_asan_cxx17,intf_pub_cxx17>>
               $<BUILD_INTERFACE:dlog_headers>
-              $<$<TARGET_EXISTS:ops_base_util_objs>:$<TARGET_OBJECTS:ops_base_util_objs>>
-              $<$<TARGET_EXISTS:ops_base_infer_objs>:$<TARGET_OBJECTS:ops_base_infer_objs>>
+              $<$<TARGET_EXISTS:opbase_util_objs>:$<TARGET_OBJECTS:opbase_util_objs>>
+              $<$<TARGET_EXISTS:opbase_infer_objs>:$<TARGET_OBJECTS:opbase_infer_objs>>
       )
   endif()
 endfunction()
 
 # 添加gentask object
-function(add_opmaster_ct_gentask_modules)
-  message(STATUS "add_opmaster_ct_gentask_modules start")
-  if (NOT TARGET ${OPHOST_NAME}_opmaster_ct_gentask_obj)
-    add_library(${OPHOST_NAME}_opmaster_ct_gentask_obj OBJECT)
-    add_dependencies(${OPHOST_NAME}_opmaster_ct_gentask_obj json)
+function(add_gentask_modules)
+  message(STATUS "add_gentask_modules start")
+  if (NOT TARGET ${OPGRAPH_NAME}_gentask_obj)
+    add_library(${OPGRAPH_NAME}_gentask_obj OBJECT)
+    add_dependencies(${OPGRAPH_NAME}_gentask_obj json)
 
-    target_include_directories(${OPHOST_NAME}_opmaster_ct_gentask_obj
+    target_include_directories(${OPGRAPH_NAME}_gentask_obj
       PRIVATE ${OP_TILING_INCLUDE}
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/${SYSTEM_PREFIX}/include>>
       $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:${ASCEND_CANN_PACKAGE_PATH}/${SYSTEM_PREFIX}/include/experiment/metadef/common/util>>
     )
-    target_compile_definitions(${OPHOST_NAME}_opmaster_ct_gentask_obj
+    target_compile_definitions(${OPGRAPH_NAME}_gentask_obj
       PRIVATE
       LOG_CPP
     )
-    target_compile_options(${OPHOST_NAME}_opmaster_ct_gentask_obj
+    target_compile_options(${OPGRAPH_NAME}_gentask_obj
       PRIVATE
       $<$<NOT:$<BOOL:${ENABLE_TEST}>>:-DDISABLE_COMPILE_V1>
       -Dgoogle=ascend_private
       -fvisibility=hidden
       -fno-strict-aliasing
     )
-    message(STATUS "xxxx compile add_opmaster_ct_gentask_modules")
-    target_link_libraries(${OPHOST_NAME}_opmaster_ct_gentask_obj
+    message(STATUS "xxxx compile add_gentask_modules")
+    target_link_libraries(${OPGRAPH_NAME}_gentask_obj
       PRIVATE
       $<BUILD_INTERFACE:intf_pub_cxx17>
       $<$<BOOL:${alog_FOUND}>:$<BUILD_INTERFACE:alog_headers>>
       $<$<BOOL:${dlog_FOUND}>:$<BUILD_INTERFACE:dlog_headers>>
-      # $<$<BOOL:${BUILD_OPEN_PROJECT}>:$<BUILD_INTERFACE:alog_headers>>
-      # $<$<NOT:$<BOOL:${BUILD_OPEN_PROJECT}>>:$<BUILD_INTERFACE:slog_headers>>
+      graph
+      graph_base
+      exe_graph
+      platform
+      runtime
     )
   endif()
 endfunction()
@@ -701,8 +714,8 @@ function(add_onnx_plugin_modules)
       ${ONNX_PLUGIN_NAME}_obj
       PRIVATE $<BUILD_INTERFACE:$<IF:$<BOOL:${ENABLE_TEST}>,intf_llt_pub_asan_cxx14,intf_pub_cxx14>>
               $<BUILD_INTERFACE:dlog_headers>
-              $<$<TARGET_EXISTS:ops_base_util_objs>:$<TARGET_OBJECTS:ops_base_util_objs>>
-              $<$<TARGET_EXISTS:ops_base_infer_objs>:$<TARGET_OBJECTS:ops_base_infer_objs>>
+              $<$<TARGET_EXISTS:opbase_util_objs>:$<TARGET_OBJECTS:opbase_util_objs>>
+              $<$<TARGET_EXISTS:opbase_infer_objs>:$<TARGET_OBJECTS:opbase_infer_objs>>
               json
       )
   endif()
@@ -720,3 +733,57 @@ macro(add_onnx_plugin_sources)
     message(WARNING "No onnx plugin source files found in ${SOURCE_DIR}")
   endif()
 endmacro()
+
+# useage: add_aicpu_kernel_modules()
+# 添加aicpu kernel object
+function(add_aicpu_kernel_modules)
+  message(STATUS "add_aicpu_kernel_modules")
+  if(NOT TARGET ${OPHOST_NAME}_aicpu_obj)
+    add_library(${OPHOST_NAME}_aicpu_obj OBJECT)
+    target_include_directories(${OPHOST_NAME}_aicpu_obj PRIVATE ${AICPU_INCLUDE})
+    target_compile_definitions(
+            ${OPHOST_NAME}_aicpu_obj PRIVATE _FORTIFY_SOURCE=2 google=ascend_private
+            $<$<BOOL:${ENABLE_TEST}>:ASCEND_AICPU_UT>
+    )
+    target_compile_options(
+            ${OPHOST_NAME}_aicpu_obj PRIVATE $<$<NOT:$<BOOL:${ENABLE_TEST}>>:-DDISABLE_COMPILE_V1> -Dgoogle=ascend_private
+            -fvisibility=hidden ${AICPU_DEFINITIONS}
+    )
+    target_link_libraries(
+            ${OPHOST_NAME}_aicpu_obj
+            PRIVATE $<BUILD_INTERFACE:$<IF:$<BOOL:${ENABLE_TEST}>,intf_llt_pub_asan_cxx17,intf_pub_cxx17>>
+            $<BUILD_INTERFACE:dlog_headers>
+    )
+  endif()
+endfunction()
+
+# useage: add_aicpu_cust_kernel_modules(target_name)
+# 添加aicpu cust kernel object target
+function(add_aicpu_cust_kernel_modules target_name)
+  message(STATUS "add_aicpu_cust_kernel_modules for ${target_name}")
+  if(NOT TARGET ${target_name})
+    add_library(${target_name} OBJECT)
+    target_include_directories(${target_name} PRIVATE ${AICPU_INCLUDE})
+    target_compile_definitions(
+            ${target_name} PRIVATE
+            _FORTIFY_SOURCE=2 _GLIBCXX_USE_CXX11_ABI=1
+            google=ascend_private
+            $<$<BOOL:${ENABLE_TEST}>:ASCEND_AICPU_UT>
+    )
+    target_compile_options(
+            ${target_name} PRIVATE
+            $<$<NOT:$<BOOL:${ENABLE_TEST}>>:-DDISABLE_COMPILE_V1> -Dgoogle=ascend_private
+            -fvisibility=hidden ${AICPU_DEFINITIONS}
+    )
+    target_link_libraries(
+            ${target_name}
+            PRIVATE $<BUILD_INTERFACE:$<IF:$<BOOL:${ENABLE_TEST}>,intf_llt_pub_asan_cxx17,intf_pub_cxx17>>
+            $<BUILD_INTERFACE:dlog_headers>
+            -Wl,--no-whole-archive
+            Eigen3::EigenTransformer
+    )
+    if (NOT ${target_name} IN_LIST AICPU_CUST_OBJ_TARGETS)
+      set(AICPU_CUST_OBJ_TARGETS ${AICPU_CUST_OBJ_TARGETS} ${target_name} CACHE INTERNAL "All aicpu cust obj targets")
+    endif()
+  endif()
+endfunction()
