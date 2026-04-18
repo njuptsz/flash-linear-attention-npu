@@ -29,7 +29,6 @@ const aclTensor * ChunkBwdDvLocal(
     double scale,
     int64_t chunkSize,
     const aclTensor *out,
-    uint64_t *workspaceSize,
     aclOpExecutor *executor)
 {
     L0_DFX(ChunkBwdDvLocal, q, k, dO, g, gGammaOptional, aOptional, cuSeqlensOptional, chunkIndicesOptional, scale, chunkSize, out);
@@ -55,7 +54,7 @@ const aclTensor * ChunkBwdDvLocal(
     }
 
     auto ret = ADD_TO_LAUNCHER_LIST_AICORE(ChunkBwdDvLocal,
-        OP_INPUT(q, k, dO, g, gGammaOptional, aOptional, cuSeqlensOptional, chunkIndicesOptional),
+        OP_INPUT(q, k, dO, g, gGammaOptional, aOptional, actualCuSeqQLen, actualChunkIndices),
         OP_OUTPUT(out),
         OP_ATTR(scale, chunkSize));
     if (ret != ACLNN_SUCCESS) {

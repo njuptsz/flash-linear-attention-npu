@@ -9,12 +9,12 @@
 add_op_to_compiled_list()
 
 if (BUILD_OPEN_PROJECT)
-    target_sources(op_host_aclnn PRIVATE
+    target_sources(op_host_aclnnExc PRIVATE
         chunk_bwd_dv_local_def.cpp
     )
 endif()
 
-add_modules_sources(OPTYPE chunk_bwd_dv_local ACLNNTYPE aclnn)
+add_modules_sources(OPTYPE chunk_bwd_dv_local ACLNNTYPE aclnn_exclude)
 add_ops_compile_options(
     OP_NAME ChunkBwdDvLocal
     OPTIONS --cce-auto-sync=off
