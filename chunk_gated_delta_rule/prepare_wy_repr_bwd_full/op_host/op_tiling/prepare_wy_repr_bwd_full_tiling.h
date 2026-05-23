@@ -21,7 +21,6 @@
 #include "tiling/tiling_api.h"
 
 namespace optiling {
-
 static constexpr size_t INPUT_K_IDX = 0;
 static constexpr size_t INPUT_V_IDX = 1;
 static constexpr size_t INPUT_BETA_IDX = 2;
@@ -46,6 +45,10 @@ static constexpr int64_t CHUNK_INDICES_DIM_1_SIZE = 2;
 
 static constexpr int64_t CHUNK_SIZE_64 = 64;
 static constexpr int64_t CHUNK_SIZE_128 = 128;
+
+/** Value head dimension V supported by cube/vector tiling. */
+static constexpr int64_t V_DIM_128 = 128;
+static constexpr int64_t V_DIM_256 = 256;
 
 static constexpr int64_t VAR_LEN_B_DIM_1 = 1;
 

@@ -288,7 +288,7 @@ public:
                     // Represent the full tensors
                     auto tensorAT = tla::MakeTensor(gmAT, params.layoutAT, Arch::PositionGM{});
                     auto tensorDu = tla::MakeTensor(gmDu, params.layoutDu, Arch::PositionGM{});
-                    auto tensorDvb = tla::MakeTensor(gmDvb, params.layoutDkbg, Arch::PositionGM{});
+                    auto tensorDvb = tla::MakeTensor(gmDvb, params.layoutDvb, Arch::PositionGM{});
 
                     // Make tiled views
                     auto tensorBlockAT = GetTile(tensorAT, tla::MakeCoord(0, 0),
@@ -343,7 +343,7 @@ public:
 };
 } // namespace Catlass::Gemm::Kernel
 
-template <typename kType, typename betaType>
+template <typename kType, typename betaType, typename L1TileShape, typename L0TileShape>
 class PrepareWyReprBwdFullProcess {
 public:
     /** @brief constructor */
@@ -381,16 +381,17 @@ private:
     GM_ADDR workspace;
 };
 
-template <typename kType, typename betaType>
-__aicore__ inline PrepareWyReprBwdFullProcess<kType, betaType>::PrepareWyReprBwdFullProcess(
+template <typename kType, typename betaType, typename L1TileShape, typename L0TileShape>
+__aicore__ inline PrepareWyReprBwdFullProcess<kType, betaType, L1TileShape, L0TileShape>::PrepareWyReprBwdFullProcess(
     GM_ADDR k_, GM_ADDR v_, GM_ADDR beta_, GM_ADDR A_, GM_ADDR dA_, GM_ADDR dw_, GM_ADDR du_, GM_ADDR g_,
     GM_ADDR cu_seqlens_, GM_ADDR chunk_indices_, GM_ADDR dk_, GM_ADDR dv_, GM_ADDR dbeta_, GM_ADDR dg_,
     GM_ADDR workspace_)
     : k(k_), v(v_), beta(beta_), A(A_), dA(dA_), dw(dw_), du(du_), g(g_), cu_seqlens(cu_seqlens_),
       chunk_indices(chunk_indices_), dk(dk_), dv(dv_), dbeta(dbeta_), dg(dg_), workspace(workspace_){};
 
-template <typename kType, typename betaType>
-__aicore__ void inline PrepareWyReprBwdFullProcess<kType, betaType>::Init(const PrepareWyReprBwdFullTilingData &tiling)
+template <typename kType, typename betaType, typename L1TileShape, typename L0TileShape>
+__aicore__ void inline PrepareWyReprBwdFullProcess<kType, betaType, L1TileShape, L0TileShape>::Init(
+    const PrepareWyReprBwdFullTilingData &tiling)
 {
     B = tiling.B;
     T = tiling.T;
@@ -402,8 +403,8 @@ __aicore__ void inline PrepareWyReprBwdFullProcess<kType, betaType>::Init(const 
     return;
 }
 
-template <typename kType, typename betaType>
-__aicore__ void inline PrepareWyReprBwdFullProcess<kType, betaType>::Process()
+template <typename kType, typename betaType, typename L1TileShape, typename L0TileShape>
+__aicore__ void inline PrepareWyReprBwdFullProcess<kType, betaType, L1TileShape, L0TileShape>::Process()
 {
     //输入
     using LayoutTagA = layout::RowMajor;
@@ -452,8 +453,6 @@ __aicore__ void inline PrepareWyReprBwdFullProcess<kType, betaType>::Process()
 
     using ArchTag = Arch::AtlasA2;
     using DispatchPolicy = Gemm::MmadPingpong<ArchTag, true>;
-    using L1TileShape = Shape<_128, _128, _256>;
-    using L0TileShape = Shape<_128, _128, _128>;
 
     //计算dk第一部分, dA @ Kbeta
     using TileCopyDk =

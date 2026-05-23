@@ -185,7 +185,7 @@ aclnnStatus aclnnPrepareWyReprBwdFull(void *workspace, uint64_t workspaceSize, a
 {
     L2_DFX_PHASE_2(aclnnPrepareWyReprBwdFull);
     CHECK_COND(CommonOpExecutorRun(workspace, workspaceSize, executor, stream) == ACLNN_SUCCESS, ACLNN_ERR_INNER,
-               "This is an error in QuantGMMInplaceAdd launch aicore.");
+               "This is an error in PrepareWyReprBwdFull launch aicore.");
     return ACLNN_SUCCESS;
 }
 

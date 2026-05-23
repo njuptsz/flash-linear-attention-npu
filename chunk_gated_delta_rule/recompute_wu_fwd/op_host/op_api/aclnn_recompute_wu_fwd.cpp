@@ -161,7 +161,7 @@ aclnnStatus aclnnRecomputeWUFwd(void *workspace, uint64_t workspaceSize, aclOpEx
 {
     L2_DFX_PHASE_2(aclnnRecomputeWUFwd);
     CHECK_COND(CommonOpExecutorRun(workspace, workspaceSize, executor, stream) == ACLNN_SUCCESS, ACLNN_ERR_INNER,
-               "This is an error in QuantGMMInplaceAdd launch aicore.");
+               "This is an error in RecomputeWUFwd launch aicore.");
     return ACLNN_SUCCESS;
 }
 

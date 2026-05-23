@@ -20,6 +20,7 @@
 
 namespace optiling {
 
+
 class PrepareWyReprBwdFullTilingProcessor {
     gert::TilingContext *context_;
     PrepareWyReprBwdFullTilingData &tiling_;
@@ -314,6 +315,10 @@ public:
         tiling_.set_T(T);
         tiling_.set_K(K);
         tiling_.set_V(V);
+        OP_CHECK_IF(V != V_DIM_128 && V != V_DIM_256,
+                    OP_LOGE(context_->GetNodeName(),
+                            "Check value dim V failed: only %ld or %ld is supported, but get %ld.", V_DIM_128, V_DIM_256, V),
+                    return ge::GRAPH_FAILED);
         auto attrPtr = context_->GetAttrs();
         OP_CHECK_NULL_WITH_CONTEXT(context_, attrPtr);
         chunkSize = static_cast<int64_t>(*(attrPtr->GetAttrPointer<int32_t>(ATTR_CHUNK_SIZE_IDX)));
@@ -471,8 +476,12 @@ ge::graphStatus Tiling4PrepareWyReprBwdFull(gert::TilingContext *context)
         OP_CHECK_IF(processor.VariableLenTiling() != ge::GRAPH_SUCCESS, , return ge::GRAPH_FAILED);
         tiling.set_isVariable(1);
     }
-    context->SetTilingKey(1);
-    OP_LOGD(context->GetNodeName(), "tilingKey: %d", context->GetTilingKey());
+    if (tiling.get_V() == V_DIM_256) {
+        context->SetTilingKey(2);
+    } else {
+        context->SetTilingKey(1);
+    }
+    OP_LOGD(context->GetNodeName(), "tilingKey: %d (V=%ld)", context->GetTilingKey(), tiling.get_V());
     PrepareWyReprBwdFullTilingDataPrint(context, tiling);
 
     tiling.SaveToBuffer(context->GetRawTilingData()->GetData(), context->GetRawTilingData()->GetCapacity());
