@@ -87,7 +87,7 @@ template<
 >
 class GDNFwdOKernel {
 public:
-    
+
 #if defined(__CCE_AICORE__) && __CCE_AICORE__ == 310
     using ArchTag = Arch::Ascend950;
 #else
@@ -141,7 +141,7 @@ public:
 
     using ElementAtten = typename BlockMmadQK::ElementC;
     using LayoutAtten = Catlass::layout::RowMajor;
-    
+
     using ElementAttenMasked = typename BlockMmadQH::ElementA;
     using LayoutAttenMasked = Catlass::layout::RowMajor;
 
@@ -152,7 +152,7 @@ public:
     using LayoutOinter = Catlass::layout::RowMajor;
 
 
-    using ElementVNEW = typename BlockMmadAttenVNEW::ElementB; 
+    using ElementVNEW = typename BlockMmadAttenVNEW::ElementB;
     using LayoutVNEW = Catlass::layout::RowMajor;
 
 
@@ -177,7 +177,7 @@ public:
     uint32_t attnWorkspaceOffset;
     uint32_t aftermaskWorkspaceOffset;
     uint32_t maskWorkspaceOffset;
-    
+
     AscendC::GlobalTensor<ElementQ> gmQ;
     AscendC::GlobalTensor<ElementK> gmK;
     AscendC::GlobalTensor<ElementVNEW> gmV;
@@ -197,9 +197,9 @@ public:
 
     __aicore__ inline GDNFwdOKernel() {}
 
-    __aicore__ inline void Init(GM_ADDR q, GM_ADDR k, GM_ADDR v, GM_ADDR h, GM_ADDR g, 
+    __aicore__ inline void Init(GM_ADDR q, GM_ADDR k, GM_ADDR v, GM_ADDR h, GM_ADDR g,
         GM_ADDR cu_seqlens, GM_ADDR chunk_offsets, GM_ADDR o, GM_ADDR tiling, GM_ADDR user) {
-        
+
         __gm__ ChunkFwdOTilingData *__restrict gdnFwdOTilingData = reinterpret_cast<__gm__ ChunkFwdOTilingData *__restrict>(tiling);
 
         shapeBatch = gdnFwdOTilingData->shapeBatch;
@@ -262,9 +262,9 @@ public:
                 if (cubeBlockScheduler.isRunning && coreIdx < coreNum) {
 
                     GDNFwdOOffsets& cube1Offsets = cubeBlockScheduler.GetCube1Offsets();
-                    int64_t cube1OffsetQ = cube1Offsets.qkOffset; 
-                    int64_t cube1OffsetK = cube1Offsets.qkOffset; 
-                    int64_t cube1OffsetAttn = cube1Offsets.attnWorkOffset; 
+                    int64_t cube1OffsetQ = cube1Offsets.qkOffset;
+                    int64_t cube1OffsetK = cube1Offsets.qkOffset;
+                    int64_t cube1OffsetAttn = cube1Offsets.attnWorkOffset;
                     auto attenLayout = tla::MakeLayout<ElementAtten, LayoutAtten>(coreNum * chunkSize * PING_PONG_STAGES, cube1Offsets.blockTokens);
                     auto tensorQ = tla::MakeTensor(gmQ[cube1OffsetQ], qLayout, Catlass::Arch::PositionGM{});
                     auto tensorK = tla::MakeTensor(gmK[cube1OffsetK], kLayout, Catlass::Arch::PositionGM{});
@@ -286,7 +286,7 @@ public:
                     GDNFwdOOffsets& cube2Offsets = cubeBlockScheduler.GetCube23Offsets();
                     int64_t cube2OffsetQ = cube2Offsets.qkOffset;
                     int64_t cube2OffsetH = cube2Offsets.hOffset;
-                    int64_t cube2OffsetHWork = cube2Offsets.hvWorkOffset; 
+                    int64_t cube2OffsetHWork = cube2Offsets.hvWorkOffset;
                     auto tensorQ = tla::MakeTensor(gmQ[cube2OffsetQ], qLayout, Catlass::Arch::PositionGM{});
                     auto tensorH = tla::MakeTensor(gmH[cube2OffsetH], hLayout, Catlass::Arch::PositionGM{});
                     auto tensorHWork = tla::MakeTensor(gmHWorkspace[cube2OffsetHWork], ointerLayout, Catlass::Arch::PositionGM{});
@@ -304,9 +304,9 @@ public:
 
                 if (needRun && coreIdx < coreNum) {
                     GDNFwdOOffsets& cube3Offsets = cubeBlockScheduler.GetCube23Offsets();
-                    int64_t cube3OffsetAttnMask = cube3Offsets.attnWorkOffset; 
-                    int64_t cube3OffsetV = cube3Offsets.ovOffset; 
-                    int64_t cube3OffsetVWork = cube3Offsets.hvWorkOffset; 
+                    int64_t cube3OffsetAttnMask = cube3Offsets.attnWorkOffset;
+                    int64_t cube3OffsetV = cube3Offsets.ovOffset;
+                    int64_t cube3OffsetVWork = cube3Offsets.hvWorkOffset;
                     auto attenLayout = tla::MakeLayout<ElementAtten, LayoutAtten>(coreNum * chunkSize * PING_PONG_STAGES, cube3Offsets.blockTokens);
                     auto tensorAttnMask = tla::MakeTensor(gmAftermaskWorkspace[cube3OffsetAttnMask], attenLayout, Catlass::Arch::PositionGM{});
                     auto tensorV = tla::MakeTensor(gmV[cube3OffsetV], vnewLayout, Catlass::Arch::PositionGM{});
@@ -352,7 +352,7 @@ public:
                     int64_t vec1OffsetAttn = vec1Offsets.attnWorkOffset;
                     EpilogueGDNFwdOQkmask epilogueGDNFwdOQkmask(resource);
                     epilogueGDNFwdOQkmask(
-                        gmAftermaskWorkspace[vec1OffsetAttnMask], 
+                        gmAftermaskWorkspace[vec1OffsetAttnMask],
                         gmG[vec1OffsetG], gmAttnWorkspace[vec1OffsetAttn], gmMask,
                         chunkSize, vec1Offsets.blockTokens, kHeadDim, vHeadDim, pingpongFlag, vec1Offsets.batchIdx, vec1Offsets.headIdx, vec1Offsets.chunkIdx
                     );
@@ -370,8 +370,8 @@ public:
                     int64_t vec2OffsetHWork = vec2Offsets.hvWorkOffset;
                     EpilogueGDNFwdOOutput epilogueGDNFwdOOutput(resource);
                     epilogueGDNFwdOOutput(
-                        gmO[vec2OffsetO], 
-                        gmG[vec2OffsetG], gmVWorkspace[vec2OffsetVWork], gmHWorkspace[vec2OffsetHWork], 
+                        gmO[vec2OffsetO],
+                        gmG[vec2OffsetG], gmVWorkspace[vec2OffsetVWork], gmHWorkspace[vec2OffsetHWork],
                         scale, vec2Offsets.blockTokens, kHeadDim, vHeadDim, pingpongFlag, vec2Offsets.batchIdx, vec2Offsets.headIdx, vec2Offsets.chunkIdx
                     );
                 }
@@ -379,7 +379,7 @@ public:
             }
         }
     }
-    
+
 };
 
 }

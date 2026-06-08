@@ -135,7 +135,7 @@ public:
         if (storeFinalState && isFinalState && std::is_same<FinalStateElement, float>::value) {
             AscendC::SetFlag<AscendC::HardEvent::V_MTE2>(EVENT_ID2 + pingpongFlag);
         }
-        
+
         GElementInput gLastVal = gInputThisSubBlock.GetValue(chunkSize-1);
         float gLastFloat = 0.0f;
         if constexpr(std::is_same<GElementInput, float>::value) {
@@ -182,14 +182,14 @@ public:
             AscendC::PipeBarrier<PIPE_V>();
             AscendC::SetFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID2 + pingpongFlag);
             AscendC::WaitFlag<AscendC::HardEvent::V_MTE3>(EVENT_ID2 + pingpongFlag);
-            if (isFinalState) {
+            if (storeFinalState && isFinalState) {
                 AscendC::DataCopy(finalStateThisSubBlock, hUbTensor, mActualThisSubBlock * nActual);
             } else {
                 AscendC::DataCopy(hOutputThisSubBlock, hUbTensor, mActualThisSubBlock * nActual);
             }
             AscendC::SetFlag<AscendC::HardEvent::MTE3_MTE2>(EVENT_ID2 + pingpongFlag);
         }
-        
+
     }
 
 private:

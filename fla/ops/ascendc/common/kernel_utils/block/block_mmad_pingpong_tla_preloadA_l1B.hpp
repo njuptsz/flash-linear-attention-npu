@@ -58,7 +58,7 @@ template <
     class TileMmad_
 >
 struct BlockMmadTla <
-    MmadPingpongTlaPreloadAL1B<ArchTag_, ENABLE_UNIT_FLAG_, L0C_STAGES_, L1A_STAGES_, 
+    MmadPingpongTlaPreloadAL1B<ArchTag_, ENABLE_UNIT_FLAG_, L0C_STAGES_, L1A_STAGES_,
         L1B_STAGES_, L0A_STAGES_, L0B_STAGES_>,
     L1TileShape_,
     L0TileShape_,
@@ -71,7 +71,7 @@ struct BlockMmadTla <
 > {
 public:
     // Type Aliases
-    using DispatchPolicy = MmadPingpongTlaPreloadAL1B<ArchTag_, ENABLE_UNIT_FLAG_, L0C_STAGES_, 
+    using DispatchPolicy = MmadPingpongTlaPreloadAL1B<ArchTag_, ENABLE_UNIT_FLAG_, L0C_STAGES_,
         L1A_STAGES_, L1B_STAGES_, L0A_STAGES_, L0B_STAGES_>;
     using ArchTag = typename DispatchPolicy::ArchTag;
     using TileCopy = TileCopy_;
@@ -290,11 +290,11 @@ public:
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 2201)
         using CopyL0CToGm = typename TileCopy_::template CopyL0CToGm<TensorC>;
         CopyL0CToGm copyL0CToDst;
-#endif        
+#endif
 #if (defined (CATLASS_ARCH) && CATLASS_ARCH == 3510)
         using CopyL0CToDst = typename TileCopy_::template CopyL0CToDst<TensorC>;
         CopyL0CToDst copyL0CToDst;
-#endif        
+#endif
 
         uint32_t mBlockActual = actualShape.m();
         uint32_t kBlockActual = actualShape.k();
@@ -513,7 +513,7 @@ protected:
     __gm__ typename AscendC::GlobalTensor<ElementB>::PrimType* lastAddrB[L1B_STAGES];
     MatrixCoord lastCoordA[L1A_STAGES];
     MatrixCoord lastCoordB[L1B_STAGES];
-    
+
     // The id of current stage
     uint32_t l1AListId{0};
     uint32_t l1BListId{0};
