@@ -1,6 +1,8 @@
 import os
 import sys
 import warnings
+import hashlib
+import json
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -1185,6 +1187,410 @@ def _build_mean_1k_cu_seqlens(
     return torch.tensor(offsets, dtype=torch.int64, device=device)
 
 
+def _parse_cu_seqlens_arg(value: Optional[str], total_tokens: int, device: str) -> Optional[torch.LongTensor]:
+    if value is None or not str(value).strip():
+        return None
+    parts = [part.strip() for part in str(value).split(",") if part.strip()]
+    if len(parts) < 2:
+        raise ValueError("--cu-seqlens must contain at least two comma-separated integers.")
+    offsets = [int(part) for part in parts]
+    if offsets[0] != 0:
+        raise ValueError(f"--cu-seqlens must start with 0, got {offsets[0]}.")
+    if offsets[-1] != total_tokens:
+        raise ValueError(f"--cu-seqlens must end with total tokens {total_tokens}, got {offsets[-1]}.")
+    for left, right in zip(offsets, offsets[1:]):
+        if right <= left:
+            raise ValueError(f"--cu-seqlens must be strictly increasing, got {offsets}.")
+    return torch.tensor(offsets, dtype=torch.int64, device=device)
+
+
+def _build_direct_cu_seqlens(
+    *,
+    explicit_cu_seqlens: Optional[str],
+    varlen: bool,
+    total_tokens: int,
+    chunk_size: int,
+    device: str,
+    mean_len: int,
+) -> Optional[torch.LongTensor]:
+    cu_seqlens = _parse_cu_seqlens_arg(explicit_cu_seqlens, total_tokens, device)
+    if cu_seqlens is not None:
+        return cu_seqlens
+    if not varlen:
+        return None
+    return _build_mean_1k_cu_seqlens(
+        total_tokens=total_tokens,
+        chunk_size=chunk_size,
+        device=device,
+        mean_len=mean_len,
+    )
+
+
+def _sanitize_case_name(value: str) -> str:
+    value = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in value.strip())
+    return value or "flash_gated_delta_rule"
+
+
+def _accuracy_tensor_names(value: str) -> list[str]:
+    if not value.strip():
+        return ["o"]
+    names = [name.strip() for name in value.split(",") if name.strip()]
+    allowed = {"o", "dq", "dk", "dv", "dbeta", "dg"}
+    unknown = [name for name in names if name not in allowed]
+    if unknown:
+        raise ValueError(f"Unsupported accuracy tensor(s): {', '.join(unknown)}.")
+    return names
+
+
+def _make_accuracy_config(args, *, query_heads: int, value_heads: int, key_dim: int, value_dim: int, scale: float) -> dict:
+    return {
+        "version": 1,
+        "B": int(args.batch),
+        "T": int(args.tokens),
+        "query_heads": int(query_heads),
+        "value_heads": int(value_heads),
+        "key_dim": int(key_dim),
+        "value_dim": int(value_dim),
+        "chunk_size": int(args.chunk_size),
+        "dtype": str(args.dtype),
+        "seed": int(args.seed),
+        "gate_function": str(args.gate_function),
+        "initial_state": str(args.initial_state),
+        "output_final_state": bool(args.output_final_state),
+        "qk_l2norm": bool(args.qk_l2norm),
+        "pre_normalize_qk": not bool(args.qk_l2norm),
+        "varlen": bool(args.varlen),
+        "cu_seqlens": str(args.cu_seqlens or ""),
+        "mean_len": int(args.mean_len),
+        "scale": float(scale),
+        "tensors": _accuracy_tensor_names(args.accuracy_tensors),
+    }
+
+
+def _accuracy_golden_path(cache_dir: Path, case_name: str, config: dict) -> Path:
+    encoded = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    digest = hashlib.sha256(encoded).hexdigest()[:16]
+    return cache_dir / f"{_sanitize_case_name(case_name)}_{digest}.pt"
+
+
+def _make_cpu_direct_inputs(
+    *,
+    batch: int,
+    query_heads: int,
+    value_heads: int,
+    tokens: int,
+    key_dim: int,
+    value_dim: int,
+    dtype: torch.dtype,
+    gate_function: str,
+    seed: int,
+    pre_normalize_qk: bool,
+) -> dict[str, torch.Tensor]:
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(seed)
+    q = torch.rand(batch, query_heads, tokens, key_dim, dtype=torch.float32, generator=generator)
+    k = torch.rand(batch, query_heads, tokens, key_dim, dtype=torch.float32, generator=generator)
+    if pre_normalize_qk:
+        q = F.normalize(q, p=2, dim=-1)
+        k = F.normalize(k, p=2, dim=-1)
+    q = q.to(dtype)
+    k = k.to(dtype)
+    v = torch.rand(batch, value_heads, tokens, value_dim, dtype=torch.float32, generator=generator).to(dtype)
+    beta = torch.rand(batch, tokens, value_heads, dtype=torch.float32, generator=generator).to(dtype).sigmoid()
+    if gate_function == "logsigmoid":
+        g = F.logsigmoid(torch.randn(batch, tokens, value_heads, dtype=torch.float32, generator=generator))
+    elif gate_function == "negative_linear":
+        lo, hi = -5e-2, -5e-5
+        g_t = torch.linspace(hi, lo, tokens, dtype=torch.float32)
+        g = g_t.view(1, tokens, 1).expand(batch, tokens, value_heads).contiguous()
+    elif gate_function == "zeros":
+        g = torch.zeros(batch, tokens, value_heads, dtype=torch.float32)
+    else:
+        raise ValueError(f"Unsupported gate_function: {gate_function}")
+    do = torch.randn(batch, tokens, value_heads, value_dim, dtype=torch.float32, generator=generator).to(dtype)
+    return {"q": q, "k": k, "v": v, "beta": beta, "g": g, "do": do}
+
+
+def _naive_recurrent_gated_delta_rule_cpu(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    beta: torch.Tensor,
+    g: torch.Tensor,
+    *,
+    scale: float,
+) -> torch.Tensor:
+    q, k, v, beta, g = [x.transpose(1, 2).contiguous().float() for x in (q, k, v, beta, g)]
+    B, H, T, K = q.shape
+    V = v.shape[-1]
+    state = q.new_zeros(B, H, K, V)
+    o = q.new_empty(B, H, T, V)
+    q = q * scale
+    for idx in range(T):
+        q_i = q[:, :, idx]
+        k_i = k[:, :, idx]
+        v_i = v[:, :, idx]
+        beta_i = beta[:, :, idx]
+        g_i = g[:, :, idx].exp()
+        state = state * g_i[..., None, None]
+        delta_v = v_i - (state * k_i[..., None]).sum(-2)
+        delta_v = delta_v * beta_i[..., None]
+        state = state + k_i.unsqueeze(-1) * delta_v.unsqueeze(-2)
+        o[:, :, idx] = torch.einsum("bhd,bhdm->bhm", q_i, state)
+    return o.transpose(1, 2).contiguous()
+
+
+def _run_cpu_accuracy_reference(
+    inputs: dict[str, torch.Tensor],
+    *,
+    query_heads: int,
+    value_heads: int,
+    scale: float,
+    qk_l2norm: bool,
+    cu_seqlens: Optional[list[int]],
+    tensors: list[str],
+) -> dict[str, torch.Tensor]:
+    q = inputs["q"].detach().float().requires_grad_("dq" in tensors)
+    k = inputs["k"].detach().float().requires_grad_("dk" in tensors)
+    v = inputs["v"].detach().float().requires_grad_("dv" in tensors)
+    beta = inputs["beta"].detach().float().requires_grad_("dbeta" in tensors)
+    g = inputs["g"].detach().float().requires_grad_("dg" in tensors)
+    do = inputs["do"].detach().float()
+
+    repeat = value_heads // query_heads
+
+    def run_slice(start: int, end: int) -> torch.Tensor:
+        q_i = q[:, :, start:end, :].transpose(1, 2)
+        k_i = k[:, :, start:end, :].transpose(1, 2)
+        if repeat != 1:
+            q_i = q_i.repeat_interleave(repeat, dim=2)
+            k_i = k_i.repeat_interleave(repeat, dim=2)
+        if qk_l2norm:
+            q_i = F.normalize(q_i, p=2, dim=-1)
+            k_i = F.normalize(k_i, p=2, dim=-1)
+        v_i = v[:, :, start:end, :].transpose(1, 2)
+        return _naive_recurrent_gated_delta_rule_cpu(
+            q=q_i,
+            k=k_i,
+            v=v_i,
+            beta=beta[:, start:end, :],
+            g=g[:, start:end, :],
+            scale=scale,
+        )
+
+    if cu_seqlens is None:
+        o = run_slice(0, q.shape[2])
+    else:
+        outputs = [run_slice(cu_seqlens[idx], cu_seqlens[idx + 1]) for idx in range(len(cu_seqlens) - 1)]
+        o = torch.cat(outputs, dim=1)
+
+    result = {"o": o.detach().cpu()}
+    grad_names = {"dq", "dk", "dv", "dbeta", "dg"}
+    if grad_names.intersection(tensors):
+        (o * do).sum().backward()
+        grads = {
+            "dq": q.grad,
+            "dk": k.grad,
+            "dv": v.grad,
+            "dbeta": beta.grad,
+            "dg": g.grad,
+        }
+        for name in grad_names.intersection(tensors):
+            result[name] = grads[name].detach().cpu()
+    return result
+
+
+def _load_or_create_accuracy_golden(
+    *,
+    path: Path,
+    config: dict,
+    inputs: dict[str, torch.Tensor],
+    query_heads: int,
+    value_heads: int,
+    scale: float,
+    qk_l2norm: bool,
+    cu_seqlens: Optional[list[int]],
+    force_regenerate: bool,
+) -> dict[str, torch.Tensor]:
+    if path.exists() and not force_regenerate:
+        loaded = torch.load(path, map_location="cpu")
+        if loaded.get("config") == config:
+            print(f"accuracy golden: reused {path}")
+            return loaded["tensors"]
+        print(f"accuracy golden: config mismatch, regenerating {path}")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tensors = _run_cpu_accuracy_reference(
+        inputs,
+        query_heads=query_heads,
+        value_heads=value_heads,
+        scale=scale,
+        qk_l2norm=qk_l2norm,
+        cu_seqlens=cu_seqlens,
+        tensors=config["tensors"],
+    )
+    torch.save({"config": config, "tensors": tensors}, path)
+    print(f"accuracy golden: generated {path}")
+    return tensors
+
+
+def _run_npu_accuracy_candidate(
+    inputs: dict[str, torch.Tensor],
+    *,
+    device: str,
+    query_heads: int,
+    value_heads: int,
+    scale: float,
+    qk_l2norm: bool,
+    cu_seqlens: Optional[torch.LongTensor],
+    chunk_size: int,
+    tensors: list[str],
+) -> dict[str, torch.Tensor]:
+    q = inputs["q"].to(device).contiguous().requires_grad_("dq" in tensors)
+    k = inputs["k"].to(device).contiguous().requires_grad_("dk" in tensors)
+    v = inputs["v"].to(device).contiguous().requires_grad_("dv" in tensors)
+    beta = inputs["beta"].to(device).contiguous().requires_grad_("dbeta" in tensors)
+    g = inputs["g"].to(device).contiguous().requires_grad_("dg" in tensors)
+    do = inputs["do"].to(device).contiguous()
+
+    attn_q = q
+    attn_k = k
+    if query_heads != value_heads:
+        repeat = value_heads // query_heads
+        attn_q = q.repeat_interleave(repeat, dim=1)
+        attn_k = k.repeat_interleave(repeat, dim=1)
+
+    o, _ = flash_gated_delta_rule(
+        attn_q,
+        attn_k,
+        v,
+        g=g,
+        beta=beta,
+        scale=scale,
+        initial_state=None,
+        output_final_state=False,
+        use_qk_l2norm_in_kernel=qk_l2norm,
+        cu_seqlens=cu_seqlens,
+        chunk_size=chunk_size,
+    )
+    torch.npu.synchronize()
+    result = {"o": o.detach().cpu()}
+
+    grad_names = {"dq", "dk", "dv", "dbeta", "dg"}
+    if grad_names.intersection(tensors):
+        (o.float() * do.float()).sum().backward()
+        torch.npu.synchronize()
+        grads = {
+            "dq": q.grad,
+            "dk": k.grad,
+            "dv": v.grad,
+            "dbeta": beta.grad,
+            "dg": g.grad,
+        }
+        for name in grad_names.intersection(tensors):
+            result[name] = grads[name].detach().cpu()
+    return result
+
+
+def _accuracy_metric(name: str, actual: torch.Tensor, expected: torch.Tensor, tol: float) -> tuple[bool, str]:
+    actual = actual.float()
+    expected = expected.float()
+    diff = (actual - expected).abs()
+    finite = bool(torch.isfinite(actual).all().item() and torch.isfinite(expected).all().item())
+    allclose = bool(torch.allclose(actual, expected, rtol=tol, atol=tol))
+    max_abs = float(diff.max().item())
+    mean_abs = float(diff.mean().item())
+    rmse = float(torch.sqrt((diff * diff).mean()).item())
+    bad = diff > (tol + tol * expected.abs())
+    bad_frac = float(bad.float().mean().item())
+    return finite and allclose, (
+        f"{name}: finite={finite} allclose={allclose} tol={tol:g} "
+        f"max_abs={max_abs:.6g} mean_abs={mean_abs:.6g} rmse={rmse:.6g} bad_frac={bad_frac:.6g}"
+    )
+
+
+def _run_accuracy_check(
+    args,
+    *,
+    dtype: torch.dtype,
+    query_heads: int,
+    value_heads: int,
+    key_dim: int,
+    value_dim: int,
+    scale: float,
+    device: str,
+    cu_seqlens: Optional[torch.LongTensor],
+) -> None:
+    if args.demo_model:
+        raise ValueError("--accuracy-check is only supported by the direct flash_gated_delta_rule path.")
+    if args.initial_state != "none":
+        raise ValueError("--accuracy-check currently requires --initial-state none.")
+    if args.output_final_state:
+        raise ValueError("--accuracy-check currently compares o/grads and requires output_final_state=false.")
+
+    tensors = _accuracy_tensor_names(args.accuracy_tensors)
+    config = _make_accuracy_config(
+        args,
+        query_heads=query_heads,
+        value_heads=value_heads,
+        key_dim=key_dim,
+        value_dim=value_dim,
+        scale=scale,
+    )
+    inputs = _make_cpu_direct_inputs(
+        batch=args.batch,
+        query_heads=query_heads,
+        value_heads=value_heads,
+        tokens=args.tokens,
+        key_dim=key_dim,
+        value_dim=value_dim,
+        dtype=dtype,
+        gate_function=args.gate_function,
+        seed=args.seed,
+        pre_normalize_qk=not args.qk_l2norm,
+    )
+    cu_list = _as_int_list(cu_seqlens)
+    cache_dir = Path(args.accuracy_cache_dir)
+    golden_path = _accuracy_golden_path(cache_dir, args.case_name or "flash_gated_delta_rule", config)
+    golden = _load_or_create_accuracy_golden(
+        path=golden_path,
+        config=config,
+        inputs=inputs,
+        query_heads=query_heads,
+        value_heads=value_heads,
+        scale=scale,
+        qk_l2norm=args.qk_l2norm,
+        cu_seqlens=cu_list,
+        force_regenerate=args.accuracy_force_regenerate,
+    )
+    candidate = _run_npu_accuracy_candidate(
+        inputs,
+        device=device,
+        query_heads=query_heads,
+        value_heads=value_heads,
+        scale=scale,
+        qk_l2norm=args.qk_l2norm,
+        cu_seqlens=cu_seqlens,
+        chunk_size=args.chunk_size,
+        tensors=tensors,
+    )
+
+    ok = True
+    print("accuracy check:")
+    for name in tensors:
+        tol = args.accuracy_output_tol if name == "o" else args.accuracy_grad_tol
+        if name == "dbeta":
+            tol = args.accuracy_beta_grad_tol
+        elif name == "dg":
+            tol = args.accuracy_gate_grad_tol
+        item_ok, message = _accuracy_metric(name, candidate[name], golden[name], tol)
+        print(message)
+        ok = ok and item_ok
+    if not ok:
+        raise AssertionError("accuracy check failed")
+    print("accuracy check passed")
+
+
 def _main():
     import argparse
 
@@ -1204,8 +1610,11 @@ def _main():
     parser.add_argument("--key-dim", type=int, default=None)
     parser.add_argument("--value-dim", type=int, default=128)
     parser.add_argument("--chunk-size", type=int, default=64)
+    parser.add_argument("--scale", type=float, default=None)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--dtype", choices=["fp16", "bf16"], default="bf16")
     parser.add_argument("--mean-len", type=int, default=1024)
+    parser.add_argument("--cu-seqlens", default="", help="Comma-separated varlen offsets, for example 0,64,128")
     parser.add_argument("--gate-source", choices=["g", "gk", "g+gk"], default="g")
     parser.add_argument("--gate-function", choices=["logsigmoid", "negative_linear", "zeros"], default="logsigmoid")
     parser.add_argument("--initial-state", choices=["none", "zeros", "random"], default="none")
@@ -1220,10 +1629,20 @@ def _main():
         help="运行 DemoGatedDeltaNet（从 cu_seqlens 迁移到 tensor 设备及 causal_conv 起始的完整链路）代替裸张量 attn 冒烟",
     )
     parser.add_argument("--conv-kernel", type=int, default=4, help="depthwise causal conv kernel size")
+    parser.add_argument("--accuracy-check", action="store_true")
+    parser.add_argument("--accuracy-cache-dir", default="third_party/gdr_accuracy_golden")
+    parser.add_argument("--accuracy-force-regenerate", action="store_true")
+    parser.add_argument("--accuracy-tensors", default="o,dq,dk,dv,dbeta,dg")
+    parser.add_argument("--accuracy-output-tol", type=float, default=5e-3)
+    parser.add_argument("--accuracy-grad-tol", type=float, default=8e-3)
+    parser.add_argument("--accuracy-beta-grad-tol", type=float, default=2e-2)
+    parser.add_argument("--accuracy-gate-grad-tol", type=float, default=2e-2)
     args = parser.parse_args()
 
     torch.npu.set_device(args.device)
     torch.npu.set_compile_mode(jit_compile=False)
+    torch.manual_seed(args.seed)
+    torch.npu.manual_seed_all(args.seed)
 
     dtype = torch.float16 if args.dtype == "fp16" else torch.bfloat16
     query_heads = args.query_heads if args.query_heads is not None else args.heads
@@ -1232,6 +1651,7 @@ def _main():
     value_dim = args.value_dim
     batch = args.batch
     device = f"npu:{args.device}"
+    scale = args.scale if args.scale is not None else key_dim ** -0.5
     positive_values = {
         "batch": batch,
         "tokens": args.tokens,
@@ -1275,14 +1695,14 @@ def _main():
         hidden_size = query_heads * key_dim
         if hidden_size <= 0:
             raise ValueError("hidden_size = query_heads * key_dim 非法")
-        cu_seqlens = None
-        if args.varlen:
-            cu_seqlens = _build_mean_1k_cu_seqlens(
-                total_tokens=args.tokens,
-                chunk_size=args.chunk_size,
-                device=device,
-                mean_len=args.mean_len,
-            )
+        cu_seqlens = _build_direct_cu_seqlens(
+            explicit_cu_seqlens=args.cu_seqlens,
+            varlen=args.varlen,
+            total_tokens=args.tokens,
+            chunk_size=args.chunk_size,
+            device=device,
+            mean_len=args.mean_len,
+        )
         x = torch.randn(batch, args.tokens, hidden_size, dtype=dtype, device=device, requires_grad=True)
         net = DemoGatedDeltaNet(
             hidden_size,
@@ -1309,20 +1729,15 @@ def _main():
         )
         return
 
-    q = torch.randn(batch, query_heads, args.tokens, key_dim, dtype=dtype, device=device)
-    k = torch.randn(batch, query_heads, args.tokens, key_dim, dtype=dtype, device=device)
-    v = torch.randn(batch, value_heads, args.tokens, value_dim, dtype=dtype, device=device)
-    beta = torch.rand(batch, args.tokens, value_heads, dtype=dtype, device=device).sigmoid()
-    g = _make_gate((batch, args.tokens, value_heads), dtype, device, args.gate_function)
-
-    cu_seqlens = None
-    if args.varlen:
-        cu_seqlens = _build_mean_1k_cu_seqlens(
-            total_tokens=args.tokens,
-            chunk_size=args.chunk_size,
-            device=device,
-            mean_len=args.mean_len,
-        )
+    cu_seqlens = _build_direct_cu_seqlens(
+        explicit_cu_seqlens=args.cu_seqlens,
+        varlen=args.varlen,
+        total_tokens=args.tokens,
+        chunk_size=args.chunk_size,
+        device=device,
+        mean_len=args.mean_len,
+    )
+    if cu_seqlens is not None:
         lens = cu_seqlens[1:] - cu_seqlens[:-1]
         print(
             "varlen:",
@@ -1342,6 +1757,8 @@ def _main():
         f"K={key_dim}",
         f"V={value_dim}",
         f"chunk_size={args.chunk_size}",
+        f"scale={scale}",
+        f"seed={args.seed}",
         f"dtype={args.dtype}",
         f"varlen={args.varlen}",
         f"gate_source={args.gate_source}",
@@ -1351,6 +1768,26 @@ def _main():
         f"qk_l2norm={args.qk_l2norm}",
         f"device={device}",
     )
+
+    if args.accuracy_check:
+        _run_accuracy_check(
+            args,
+            dtype=dtype,
+            query_heads=query_heads,
+            value_heads=value_heads,
+            key_dim=key_dim,
+            value_dim=value_dim,
+            scale=scale,
+            device=device,
+            cu_seqlens=cu_seqlens,
+        )
+        return
+
+    q = torch.randn(batch, query_heads, args.tokens, key_dim, dtype=dtype, device=device)
+    k = torch.randn(batch, query_heads, args.tokens, key_dim, dtype=dtype, device=device)
+    v = torch.randn(batch, value_heads, args.tokens, value_dim, dtype=dtype, device=device)
+    beta = torch.rand(batch, args.tokens, value_heads, dtype=dtype, device=device).sigmoid()
+    g = _make_gate((batch, args.tokens, value_heads), dtype, device, args.gate_function)
 
     q.requires_grad_(True)
     k.requires_grad_(True)
@@ -1381,6 +1818,7 @@ def _main():
         v,
         g=g,
         beta=beta,
+        scale=scale,
         initial_state=initial_state,
         output_final_state=args.output_final_state,
         use_qk_l2norm_in_kernel=args.qk_l2norm,
