@@ -157,6 +157,7 @@ docker run --rm \
     -e CI_RUN_EXAMPLE_ST="${CI_RUN_EXAMPLE_ST:-true}" \
     -e CI_EXAMPLE_CASES_FILE="${CI_EXAMPLE_CASES_FILE:-ci/example_st_cases.json}" \
     -e CI_EXAMPLE_CASE_FILTER="${CI_EXAMPLE_CASE_FILTER:-}" \
+    -e CI_ACCURACY_REPORT_FILE="${CI_ACCURACY_REPORT_FILE:-output/gdr_accuracy_report.json}" \
     -e GDR_ACCURACY_CACHE_DIR="$gdr_accuracy_cache_container" \
     -e CI_TEST_OP="${CI_TEST_OP:-}" \
     -e CI_TMPDIR="${CI_TMPDIR:-}" \

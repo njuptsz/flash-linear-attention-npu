@@ -409,6 +409,7 @@ jobs:
         with:
           github-token: ${{ github.token }}
           script: |
+            const fs = require('fs');
             const state = '${{ job.status }}' === 'success' ? 'success' : 'failure';
             const mode = ${{ toJson(needs.prepare.outputs.ci_mode) }};
             const ops = ${{ toJson(needs.prepare.outputs.ops) }};
@@ -416,6 +417,87 @@ jobs:
             const prNumber = ${{ toJson(needs.prepare.outputs.pr_number) }};
             const commentId = ${{ toJson(needs.prepare.outputs.comment_id) }};
             const targetUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const accuracyReportPath = 'repo/output/gdr_accuracy_report.json';
+            const formatValue = (value) => {
+              if (typeof value === 'number') {
+                return Number.isFinite(value) ? value.toExponential(3) : String(value);
+              }
+              if (typeof value === 'boolean') {
+                return value ? 'true' : 'false';
+              }
+              return value === undefined || value === null || value === '' ? '-' : String(value);
+            };
+            const truncateDescription = (value) => value.length > 140 ? `${value.slice(0, 137)}...` : value;
+            const readAccuracyReport = () => {
+              try {
+                if (!fs.existsSync(accuracyReportPath)) {
+                  return null;
+                }
+                return JSON.parse(fs.readFileSync(accuracyReportPath, 'utf8'));
+              } catch (error) {
+                core.warning(`Unable to read GDR accuracy report: ${error.message}`);
+                return null;
+              }
+            };
+            const accuracyReport = readAccuracyReport();
+            const accuracyStatus = (() => {
+              if (!accuracyReport || !accuracyReport.summary) {
+                return { state: 'failure', description: '精度报告未生成' };
+              }
+              const summary = accuracyReport.summary;
+              const total = Number(summary.accuracy_total || 0);
+              const passed = Number(summary.accuracy_passed || 0);
+              const failed = Number(summary.accuracy_failed || 0);
+              const notRun = Number(summary.accuracy_not_run || 0);
+              if (total === 0) {
+                return { state: 'failure', description: '未发现精度检查用例' };
+              }
+              if (failed > 0 || notRun > 0) {
+                return {
+                  state: 'failure',
+                  description: truncateDescription(`精度检查失败：通过 ${passed}/${total}，失败 ${failed}，未执行 ${notRun}`),
+                };
+              }
+              return {
+                state: 'success',
+                description: truncateDescription(`精度检查通过：${passed}/${total} 个用例`),
+              };
+            })();
+            const formatAccuracyComment = (report) => {
+              const lines = ['', '### 精度检查详情', ''];
+              if (!report || !report.summary) {
+                lines.push('未生成精度报告。');
+                return lines;
+              }
+              const summary = report.summary;
+              lines.push(
+                `精度用例：通过 ${summary.accuracy_passed || 0}/${summary.accuracy_total || 0}，` +
+                  `失败 ${summary.accuracy_failed || 0}，未执行 ${summary.accuracy_not_run || 0}。`
+              );
+              lines.push('');
+              lines.push('| 用例 | Tensor | 结果 | tol | cosine | cos_min | max_abs | mean_abs | rmse | bad_frac | golden |');
+              lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+              for (const item of report.cases || []) {
+                const caseName = item.name || '-';
+                const caseStatus = item.accuracy_status || item.status || '-';
+                const golden = item.golden || '-';
+                const metrics = item.metrics || [];
+                if (metrics.length === 0) {
+                  lines.push(`| ${caseName} | - | ${caseStatus} | - | - | - | - | - | - | - | ${golden} |`);
+                  continue;
+                }
+                for (const metric of metrics) {
+                  const metricOk = metric.finite === true && metric.allclose === true && metric.cosine_ok === true;
+                  lines.push(
+                    `| ${caseName} | ${metric.tensor || '-'} | ${metricOk ? '通过' : '失败'} | ` +
+                      `${formatValue(metric.tol)} | ${formatValue(metric.cosine)} | ${formatValue(metric.cos_min)} | ` +
+                      `${formatValue(metric.max_abs)} | ${formatValue(metric.mean_abs)} | ${formatValue(metric.rmse)} | ` +
+                      `${formatValue(metric.bad_frac)} | ${golden} |`
+                  );
+                }
+              }
+              return lines;
+            };
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -423,6 +505,15 @@ jobs:
               state,
               context: 'NPU CI / 手动验证',
               description: state === 'success' ? `NPU CI 通过 (${mode}+example)` : `NPU CI 失败 (${mode}+example)`,
+              target_url: targetUrl,
+            });
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha,
+              state: accuracyStatus.state,
+              context: 'NPU CI / 精度检查',
+              description: accuracyStatus.description,
               target_url: targetUrl,
             });
             const result = state === 'success' ? '通过' : '失败';
@@ -434,8 +525,10 @@ jobs:
               `- 触发人：@${context.actor}`,
               '- Example ST：必跑',
               '- Example ST 用例：全部 enabled 用例',
+              `- 精度检查：${accuracyStatus.description}`,
               ops ? `- 算子：\`${ops}\`` : '',
               `- 运行链接：[NPU CI #${context.runNumber}](${targetUrl})`,
+              ...formatAccuracyComment(accuracyReport),
             ].filter(Boolean).join('\n');
 
             try {

@@ -249,6 +249,9 @@ if [[ "${CI_RUN_EXAMPLE_ST:-true}" == "true" ]]; then
     check_example_python_deps
     build_torch_custom
     example_st_args=(--device "$ci_test_device" --cases-file "${CI_EXAMPLE_CASES_FILE:-ci/example_st_cases.json}")
+    accuracy_report_file="${CI_ACCURACY_REPORT_FILE:-output/gdr_accuracy_report.json}"
+    mkdir -p "$(dirname "$accuracy_report_file")"
+    example_st_args+=(--accuracy-report-file "$accuracy_report_file")
     if [[ -n "${CI_EXAMPLE_CASE_FILTER:-}" ]]; then
         example_st_args+=(--case-filter "$CI_EXAMPLE_CASE_FILTER")
     fi
