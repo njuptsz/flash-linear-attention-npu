@@ -1494,19 +1494,40 @@ def _run_npu_accuracy_candidate(
     return result
 
 
-def _accuracy_metric(name: str, actual: torch.Tensor, expected: torch.Tensor, tol: float) -> tuple[bool, str]:
+def _cosine_similarity(actual: torch.Tensor, expected: torch.Tensor) -> float:
+    actual = actual.reshape(-1).double()
+    expected = expected.reshape(-1).double()
+    actual_norm = torch.linalg.vector_norm(actual)
+    expected_norm = torch.linalg.vector_norm(expected)
+    denom = actual_norm * expected_norm
+    if denom.item() == 0:
+        return 1.0 if actual_norm.item() == 0 and expected_norm.item() == 0 else 0.0
+    cosine = torch.dot(actual, expected) / denom
+    return float(torch.clamp(cosine, min=-1.0, max=1.0).item())
+
+
+def _accuracy_metric(
+    name: str,
+    actual: torch.Tensor,
+    expected: torch.Tensor,
+    tol: float,
+    cos_min: float,
+) -> tuple[bool, str]:
     actual = actual.float()
     expected = expected.float()
     diff = (actual - expected).abs()
     finite = bool(torch.isfinite(actual).all().item() and torch.isfinite(expected).all().item())
     allclose = bool(torch.allclose(actual, expected, rtol=tol, atol=tol))
+    cosine = _cosine_similarity(actual, expected) if finite else float("nan")
+    cosine_ok = bool(cosine >= cos_min)
     max_abs = float(diff.max().item())
     mean_abs = float(diff.mean().item())
     rmse = float(torch.sqrt((diff * diff).mean()).item())
     bad = diff > (tol + tol * expected.abs())
     bad_frac = float(bad.float().mean().item())
-    return finite and allclose, (
+    return finite and allclose and cosine_ok, (
         f"{name}: finite={finite} allclose={allclose} tol={tol:g} "
+        f"cosine={cosine:.9g} cos_min={cos_min:g} cosine_ok={cosine_ok} "
         f"max_abs={max_abs:.6g} mean_abs={mean_abs:.6g} rmse={rmse:.6g} bad_frac={bad_frac:.6g}"
     )
 
@@ -1581,11 +1602,14 @@ def _run_accuracy_check(
     print("accuracy check:")
     for name in tensors:
         tol = args.accuracy_output_tol if name == "o" else args.accuracy_grad_tol
+        cos_min = args.accuracy_output_cos_min if name == "o" else args.accuracy_grad_cos_min
         if name == "dbeta":
             tol = args.accuracy_beta_grad_tol
+            cos_min = args.accuracy_beta_grad_cos_min
         elif name == "dg":
             tol = args.accuracy_gate_grad_tol
-        item_ok, message = _accuracy_metric(name, candidate[name], golden[name], tol)
+            cos_min = args.accuracy_gate_grad_cos_min
+        item_ok, message = _accuracy_metric(name, candidate[name], golden[name], tol, cos_min)
         print(message)
         ok = ok and item_ok
     if not ok:
@@ -1642,6 +1666,10 @@ def _main():
     parser.add_argument("--accuracy-grad-tol", type=float, default=8e-3)
     parser.add_argument("--accuracy-beta-grad-tol", type=float, default=2e-2)
     parser.add_argument("--accuracy-gate-grad-tol", type=float, default=2e-2)
+    parser.add_argument("--accuracy-output-cos-min", type=float, default=0.999)
+    parser.add_argument("--accuracy-grad-cos-min", type=float, default=0.999)
+    parser.add_argument("--accuracy-beta-grad-cos-min", type=float, default=0.99)
+    parser.add_argument("--accuracy-gate-grad-cos-min", type=float, default=0.99)
     args = parser.parse_args()
 
     torch.npu.set_device(args.device)
