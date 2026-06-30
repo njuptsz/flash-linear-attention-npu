@@ -1,10 +1,10 @@
 ﻿/**
- * Copyright (c) 2025 Tianjin University, Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- */
+ * Copyright (c) 2025 Tianjin University, Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ */
 
 /*!
  * \file recurrent_gated_delta_rule_tiling.cpp
@@ -18,8 +18,6 @@
 #include "err/ops_err.h"
 #include "log/log.h"
 #include "tiling/platform/platform_ascendc.h"
-#include "util/math_util.h"
-#include <array>
 
 namespace optiling {
 
@@ -36,20 +34,6 @@ const size_t G_INDEX = 7;
 const size_t GK_INDEX = 8;
 const size_t ACC_TO_INDEX = 9;
 
-const size_t QKV_DIM_NUM = 3;
-const size_t BETA_DIM_NUM = 2;
-const size_t STATE_DIM_NUM = 4;
-const size_t CUSEQLENS_DIM_NUM = 1;
-const size_t SSM_STATE_INDICES_DIM_NUM = 1;
-const size_t G_DIM_NUM = 2;
-
-const size_t DIM_0 = 0;
-const size_t DIM_1 = 1;
-const size_t DIM_2 = 2;
-const size_t DIM_3 = 3;
-
-const size_t MAX_MTP = 8;
-
 void RecurrentGatedDeltaRuleTiling::InitCompileInfo()
 {
     auto platformInfoPtr = context_->GetPlatformInfo();
@@ -65,7 +49,28 @@ void RecurrentGatedDeltaRuleTiling::InitCompileInfo()
         OP_LOGE(context_->GetNodeName(), "aivNum <= 0");
         return;
     }
-    tilingData_.vectorCoreNum = compileInfo_.aivNum;
+    tilingData_.vectorCoreNum = static_cast<uint32_t>(compileInfo_.aivNum);
+}
+
+RecurrentGatedDeltaRuleTilingContext RecurrentGatedDeltaRuleTiling::BuildProcessorContext() const
+{
+    RecurrentGatedDeltaRuleTilingContext ctx;
+    ctx.nodeName = context_->GetNodeName();
+    ctx.queryShape = &context_->GetInputShape(QUERY_INDEX)->GetOriginShape();
+    ctx.keyShape = &context_->GetInputShape(KEY_INDEX)->GetOriginShape();
+    ctx.valueShape = &context_->GetInputShape(VALUE_INDEX)->GetOriginShape();
+    ctx.betaShape = &context_->GetInputShape(BETA_INDEX)->GetOriginShape();
+    ctx.stateShape = &context_->GetInputShape(STATE_INDEX)->GetOriginShape();
+    ctx.cuSeqlensShape = &context_->GetInputShape(CUSEQLENS_INDEX)->GetOriginShape();
+    ctx.ssmStateShape = &context_->GetInputShape(SSM_STATE_INDICES_INDEX)->GetOriginShape();
+    ctx.aivNum = compileInfo_.aivNum;
+    ctx.ubSize = compileInfo_.ubSize;
+    ctx.stateDtype = context_->GetInputDesc(STATE_INDEX)->GetDataType();
+    ctx.scale = tilingData_.scale;
+    ctx.hasGama = tilingData_.hasGama;
+    ctx.hasGamaK = tilingData_.hasGamaK;
+    ctx.hasAcceptedTokens = tilingData_.hasAcceptedTokens;
+    return ctx;
 }
 
 ge::graphStatus RecurrentGatedDeltaRuleTiling::GetPlatformInfo()
@@ -118,10 +123,7 @@ uint64_t RecurrentGatedDeltaRuleTiling::GetTilingKey() const
 
 ge::graphStatus RecurrentGatedDeltaRuleTiling::GetWorkspaceSize()
 {
-    // system workspace size is 16 * 1024 * 1024 = 16M;
-    constexpr int64_t sysWorkspaceSize = 16777216;
-    workspaceSize_ = sysWorkspaceSize;
-
+    workspaceSize_ = static_cast<int64_t>(RGDR_SYS_WORKSPACE_SIZE);
     return ge::GRAPH_SUCCESS;
 };
 
@@ -137,7 +139,7 @@ ge::graphStatus RecurrentGatedDeltaRuleTiling::PostTiling()
     }
     context_->GetRawTilingData()->SetDataSize(tilingDataSize);
 
-    size_t *workspaces = context_->GetWorkspaceSizes(1); // set workspace
+    size_t *workspaces = context_->GetWorkspaceSizes(1);
     OP_CHECK_IF(workspaces == nullptr, OPS_REPORT_CUBE_INNER_ERR(context_->GetNodeName(), "workspaces is null"),
                 return ge::GRAPH_FAILED);
     workspaces[0] = workspaceSize_;
@@ -182,8 +184,7 @@ ge::graphStatus RecurrentGatedDeltaRuleTiling::AnalyzeDtype()
 
     auto betaDtype = context_->GetInputDesc(BETA_INDEX)->GetDataType();
     auto stateDtype = context_->GetInputDesc(STATE_INDEX)->GetDataType();
-    OP_CHECK_IF(betaDtype != ge::DT_BF16 ,
-                OP_LOGE(context_->GetNodeName(), "beta dtype should be bfloat16"),
+    OP_CHECK_IF(betaDtype != ge::DT_BF16, OP_LOGE(context_->GetNodeName(), "beta dtype should be bfloat16"),
                 return ge::GRAPH_FAILED);
     OP_CHECK_IF(stateDtype != ge::DT_FLOAT && stateDtype != ge::DT_BF16,
                 OP_LOGE(context_->GetNodeName(), "state dtype should be bfloat16 or float32"),
@@ -216,194 +217,11 @@ ge::graphStatus RecurrentGatedDeltaRuleTiling::AnalyzeDtype()
     return ge::GRAPH_SUCCESS;
 }
 
-
-bool RecurrentGatedDeltaRuleTiling::CheckDimEqual(const gert::Shape a, const int64_t dimA, gert::Shape b, const int64_t dimB,
-                                                  const std::string &nameA, const std::string &nameB,
-                                                  const std::string &dimDesc)
-{
-    if (a.GetDim(dimA) != b.GetDim(dimB)) {
-        OP_LOGE(context_->GetNodeName(), "The %s of %s and %s should be the same, but %s is %ld while %s is %ld",
-                dimDesc.c_str(), nameA.c_str(), nameB.c_str(), nameA.c_str(), a.GetDim(dimA), nameB.c_str(),
-                b.GetDim(dimB));
-        return false;
-    }
-    return true;
-}
-
-bool RecurrentGatedDeltaRuleTiling::CheckDim(const gert::Shape shape, const size_t dim, const std::string &dimDesc)
-{
-    if (shape.GetDimNum() != dim) {
-        OP_LOGE(context_->GetNodeName(), "The number of dimensons of %s should be %zu, but it is %zu",
-                dimDesc.c_str(), dim, shape.GetDimNum());
-        return false;
-    }
-    return true;
-}
-
-// Split shape checks/fill/scheduling decisions to improve readability and maintenance.
-ge::graphStatus RecurrentGatedDeltaRuleTiling::CheckShapeDimAndRelation(const gert::Shape &queryShape,
-                                                                         const gert::Shape &keyShape,
-                                                                         const gert::Shape &valueShape,
-                                                                         const gert::Shape &betaShape,
-                                                                         const gert::Shape &stateShape,
-                                                                         const gert::Shape &cuSeqlensShape,
-                                                                         const gert::Shape &ssmStateShape)
-{
-    if (!CheckDim(queryShape, QKV_DIM_NUM, "query") || !CheckDim(keyShape, QKV_DIM_NUM, "key") ||
-        !CheckDim(valueShape, QKV_DIM_NUM, "value") || !CheckDim(betaShape, BETA_DIM_NUM, "beta") ||
-        !CheckDim(stateShape, STATE_DIM_NUM, "state") ||
-        !CheckDim(cuSeqlensShape, CUSEQLENS_DIM_NUM, "actual_seq_lengths") ||
-        !CheckDim(ssmStateShape, SSM_STATE_INDICES_DIM_NUM, "ssm_state_indices")) {
-        return ge::GRAPH_FAILED;
-    }
-
-    if (!CheckDimEqual(queryShape, DIM_0, keyShape, DIM_0, "query", "key", "T dimension") ||
-        !CheckDimEqual(queryShape, DIM_1, keyShape, DIM_1, "query", "key", "Nk dimension") ||
-        !CheckDimEqual(queryShape, DIM_2, keyShape, DIM_2, "query", "key", "Dk dimension") ||
-        !CheckDimEqual(stateShape, DIM_1, valueShape, DIM_1, "state", "value", "Nv dimension") ||
-        !CheckDimEqual(stateShape, DIM_2, valueShape, DIM_2, "state", "value", "Dv dimension") ||
-        !CheckDimEqual(valueShape, DIM_0, queryShape, DIM_0, "value", "query", "T dimension") ||
-        !CheckDimEqual(betaShape, DIM_0, queryShape, DIM_0, "beta", "query", "T dimension") ||
-        !CheckDimEqual(betaShape, DIM_1, valueShape, DIM_1, "beta", "value", "Nv dimension") ||
-        !CheckDimEqual(stateShape, DIM_3, queryShape, DIM_2, "state", "query", "Dk dimension")) {
-        return ge::GRAPH_FAILED;
-    }
-
-    return ge::GRAPH_SUCCESS;
-}
-
-void RecurrentGatedDeltaRuleTiling::FillTilingShapeData(const gert::Shape &queryShape, const gert::Shape &valueShape,
-                                                         const gert::Shape &stateShape,
-                                                         const gert::Shape &cuSeqlensShape)
-{
-    tilingData_.t = queryShape.GetDim(DIM_0);
-    tilingData_.nk = queryShape.GetDim(DIM_1);
-    tilingData_.dk = queryShape.GetDim(DIM_2);
-    tilingData_.nv = valueShape.GetDim(DIM_1);
-    tilingData_.dv = valueShape.GetDim(DIM_2);
-    tilingData_.sBlockNum = stateShape.GetDim(DIM_0);
-    tilingData_.b = cuSeqlensShape.GetDim(DIM_0) - 1;
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::CheckShapeValueRangeAndRule()
-{
-    OP_CHECK_IF(tilingData_.nk > 256 || tilingData_.nv > 256 || tilingData_.dk > 512 || tilingData_.dv > 512,
-                OP_LOGE(inputParams_.opName,
-                        "nk and nv should no bigger than 256, dk and dv should no bigger than 512, but nk is %u, nv is "
-                        "%u, dk is %u, dv is %u",
-                        tilingData_.nk, tilingData_.nv, tilingData_.dk, tilingData_.dv),
-                return ge::GRAPH_FAILED);
-
-    OP_CHECK_IF(tilingData_.nv % tilingData_.nk != 0,
-                OP_LOGE(inputParams_.opName,
-                        "nv should be an integer multiple of nk, but nv is %u, nk is %u",
-                        tilingData_.nv, tilingData_.nk),
-                return ge::GRAPH_FAILED);
-
-    return ge::GRAPH_SUCCESS;
-}
-
-void RecurrentGatedDeltaRuleTiling::UpdateDynamicBlockDimByTaskUnits()
-{
-    // Dynamic blockDim: do not launch more cores than effective (batch, head) task units.
-    uint64_t taskUnits = static_cast<uint64_t>(tilingData_.b) * static_cast<uint64_t>(tilingData_.nv);
-    if (taskUnits == 0) {
-        taskUnits = 1;
-    }
-    uint64_t maxCoreNum = (compileInfo_.aivNum > 0) ? compileInfo_.aivNum : 1;
-    uint64_t selectedCoreNum = (taskUnits < maxCoreNum) ? taskUnits : maxCoreNum;
-    tilingData_.vectorCoreNum = static_cast<uint32_t>(selectedCoreNum);
-    OP_LOGD(context_->GetNodeName(), "taskUnits: [%llu], selected vectorCoreNum: [%u]",
-            static_cast<unsigned long long>(taskUnits), tilingData_.vectorCoreNum);
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::RuleCheckShapeDimAndRelation()
-{
-    const auto &queryShape = context_->GetInputShape(QUERY_INDEX)->GetOriginShape();
-    const auto &keyShape = context_->GetInputShape(KEY_INDEX)->GetOriginShape();
-    const auto &valueShape = context_->GetInputShape(VALUE_INDEX)->GetOriginShape();
-    const auto &betaShape = context_->GetInputShape(BETA_INDEX)->GetOriginShape();
-    const auto &stateShape = context_->GetInputShape(STATE_INDEX)->GetOriginShape();
-    const auto &cuSeqlensShape = context_->GetInputShape(CUSEQLENS_INDEX)->GetOriginShape();
-    const auto &ssmStateShape = context_->GetInputShape(SSM_STATE_INDICES_INDEX)->GetOriginShape();
-    return CheckShapeDimAndRelation(queryShape, keyShape, valueShape, betaShape, stateShape, cuSeqlensShape, ssmStateShape);
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::RuleFillTilingShapeData()
-{
-    const auto &queryShape = context_->GetInputShape(QUERY_INDEX)->GetOriginShape();
-    const auto &valueShape = context_->GetInputShape(VALUE_INDEX)->GetOriginShape();
-    const auto &stateShape = context_->GetInputShape(STATE_INDEX)->GetOriginShape();
-    const auto &cuSeqlensShape = context_->GetInputShape(CUSEQLENS_INDEX)->GetOriginShape();
-    FillTilingShapeData(queryShape, valueShape, stateShape, cuSeqlensShape);
-    return ge::GRAPH_SUCCESS;
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::RuleCheckShapeValueRangeAndRule()
-{
-    return CheckShapeValueRangeAndRule();
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::RuleUpdateDynamicBlockDimByTaskUnits()
-{
-    UpdateDynamicBlockDimByTaskUnits();
-    return ge::GRAPH_SUCCESS;
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::RuleInitUbCalcContext()
-{
-    ubCalcCtx_.ubSize = compileInfo_.ubSize;
-    ubCalcCtx_.aNv = Ops::Base::CeilAlign(tilingData_.nv, static_cast<uint32_t>(16)); // 16 * 2 = 32B
-    ubCalcCtx_.aDv = Ops::Base::CeilAlign(tilingData_.dv, static_cast<uint32_t>(16)); // 16 * 2 = 32B
-    ubCalcCtx_.aDk = Ops::Base::CeilAlign(tilingData_.dk, static_cast<uint32_t>(16)); // 16 * 2 = 32B
-    return ge::GRAPH_SUCCESS;
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::RuleCalcFixedUbBytes()
-{
-    ubCalcCtx_.fixedUbBytes = CalcFixedUbBytes(ubCalcCtx_.aNv, ubCalcCtx_.aDv, ubCalcCtx_.aDk);
-    tilingData_.ubRestBytes = ubCalcCtx_.ubSize - ubCalcCtx_.fixedUbBytes;
-    return ge::GRAPH_SUCCESS;
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::RuleCalcWorkingUbBytes()
-{
-    ubCalcCtx_.workingUbBytes = CalcWorkingUbBytes(ubCalcCtx_.aNv, ubCalcCtx_.aDv, ubCalcCtx_.aDk);
-    return ge::GRAPH_SUCCESS;
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::RuleCalcVStepCoeff()
-{
-    ubCalcCtx_.coeff = CalcVStepCoeff(ubCalcCtx_.aDk, 1, 1);
-    return ge::GRAPH_SUCCESS;
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::RuleFinalizeVStepFromUb()
-{
-    return FinalizeVStepFromUb(ubCalcCtx_.ubSize, ubCalcCtx_.workingUbBytes, ubCalcCtx_.coeff);
-}
-
-// AnalyzeShapes now executes a deterministic rule-chain, easier to extend/maintain.
 ge::graphStatus RecurrentGatedDeltaRuleTiling::AnalyzeShapes()
 {
-    struct RuleItem {
-        const char *name;
-        HostRuleFn fn;
-    };
-    const std::array<RuleItem, 4> shapeRules = {{
-        {"RuleCheckShapeDimAndRelation", &RecurrentGatedDeltaRuleTiling::RuleCheckShapeDimAndRelation},
-        {"RuleFillTilingShapeData", &RecurrentGatedDeltaRuleTiling::RuleFillTilingShapeData},
-        {"RuleCheckShapeValueRangeAndRule", &RecurrentGatedDeltaRuleTiling::RuleCheckShapeValueRangeAndRule},
-        {"RuleUpdateDynamicBlockDimByTaskUnits", &RecurrentGatedDeltaRuleTiling::RuleUpdateDynamicBlockDimByTaskUnits},
-    }};
-    for (const auto &rule : shapeRules) {
-        OP_CHECK_IF((this->*(rule.fn))() != ge::GRAPH_SUCCESS,
-                    OP_LOGE(inputParams_.opName, "AnalyzeShapes rule failed: %s", rule.name),
-                    return ge::GRAPH_FAILED);
-    }
-    return ge::GRAPH_SUCCESS;
+    RecurrentGatedDeltaRuleTilingProcessor processor(BuildProcessorContext());
+    return processor.ProcessShapes(tilingData_);
 }
-
 
 bool RecurrentGatedDeltaRuleTiling::CheckFormat(ge::Format format, const std::string &Desc)
 {
@@ -495,144 +313,10 @@ void RecurrentGatedDeltaRuleTiling::PrintTilingData()
     OP_LOGD(context_->GetNodeName(), "hasAcceptedTokens: [%u]", tilingData_.hasAcceptedTokens);
 }
 
-int64_t RecurrentGatedDeltaRuleTiling::CalcFixedUbBytes(int64_t aNv, int64_t aDv, int64_t aDk) const
-{
-    int64_t usedUbBytes = MAX_MTP * (4 * aDk + 2 * aDv); // 4 for qInQueue_ & kInQueue_, 2 for vInQueue_
-    usedUbBytes += 128;                                  // reserve 128 Bytes
-    if (tilingData_.hasGamaK) {
-        usedUbBytes += MAX_MTP * 4 * aDk; // 4 for gk gamaInQueue_
-    }
-    if (tilingData_.hasGama) {
-        usedUbBytes += MAX_MTP * 4 * aNv; // 4 for g gamaInQueue_
-    }
-    usedUbBytes += MAX_MTP * 2 * aNv; // 2 for betaInQueue_
-    return usedUbBytes;
-}
-
-int64_t RecurrentGatedDeltaRuleTiling::CalcWorkingUbBytes(int64_t aNv, int64_t aDv, int64_t aDk) const
-{
-    int64_t usedUbBytes = CalcFixedUbBytes(aNv, aDv, aDk);
-    usedUbBytes += MAX_MTP * (8 * aDk + 4 * aDv + 4 * aNv); // 8 for qk in ub, 4 for v in ub, 4 for beta in ub
-    return usedUbBytes;
-}
-
-int64_t RecurrentGatedDeltaRuleTiling::CalcVStepCoeff(int64_t aDk, uint32_t stateOutBufferNum,
-                                                       uint32_t attnOutBufferNum) const
-{
-    auto stateDtype = context_->GetInputDesc(STATE_INDEX)->GetDataType();
-    int64_t stateDtypeSize = (stateDtype == ge::DT_FLOAT) ? 4 : 2;
-    int64_t coeff = (stateDtypeSize + static_cast<int64_t>(stateDtypeSize * stateOutBufferNum)) * aDk +
-                    static_cast<int64_t>(4 * attnOutBufferNum); // stateIn/stateOut/attnOut queues
-    coeff += (4 + 4) * aDk + 4 + 4;                             // qInUb/kInUb/vInUb/deltaInUb/attnInUb
-    return coeff;
-}
-
-bool RecurrentGatedDeltaRuleTiling::EvaluateBufferProfile(int64_t ubSize, int64_t usedUbBytes, int64_t aDk,
-                                                           uint32_t stateOutBufferNum, uint32_t attnOutBufferNum,
-                                                           BufferProfile &profile) const
-{
-    int64_t coeff = CalcVStepCoeff(aDk, stateOutBufferNum, attnOutBufferNum);
-    int64_t vStep = (ubSize - usedUbBytes) / coeff / 8 * 8; // 8 * sizeof(float) = 32
-    if (vStep < 8) {
-        return false;
-    }
-    int64_t repeatTime = Ops::Base::CeilDiv(tilingData_.dv, static_cast<uint32_t>(vStep));
-    vStep = Ops::Base::CeilAlign(Ops::Base::CeilDiv(tilingData_.dv, static_cast<uint32_t>(repeatTime)),
-                                 static_cast<uint32_t>(8));
-    if (vStep < 8) {
-        return false;
-    }
-    profile.stateOutBufferNum = stateOutBufferNum;
-    profile.attnOutBufferNum = attnOutBufferNum;
-    profile.vStep = static_cast<uint32_t>(vStep);
-    profile.repeatTime = static_cast<uint32_t>(repeatTime);
-    profile.valid = true;
-    return true;
-}
-
-bool RecurrentGatedDeltaRuleTiling::IsBetterProfile(const BufferProfile &candidate, const BufferProfile &current) const
-{
-    if (!current.valid) {
-        return true;
-    }
-    if (candidate.repeatTime != current.repeatTime) {
-        return candidate.repeatTime < current.repeatTime;
-    }
-    uint32_t candidateDepth = candidate.stateOutBufferNum + candidate.attnOutBufferNum;
-    uint32_t currentDepth = current.stateOutBufferNum + current.attnOutBufferNum;
-    if (candidateDepth != currentDepth) {
-        return candidateDepth > currentDepth;
-    }
-    return candidate.vStep > current.vStep;
-}
-
-ge::graphStatus RecurrentGatedDeltaRuleTiling::FinalizeVStepFromUb(int64_t ubSize, int64_t usedUbBytes, int64_t coeff)
-{
-    (void)coeff;
-    int64_t aDk = Ops::Base::CeilAlign(tilingData_.dk, static_cast<uint32_t>(16)); // 16 * 2 = 32B
-    BufferProfile selected;
-    const std::array<BufferProfile, 3> candidates = {{
-        {1, 1, 0, 0, false},
-        {1, 2, 0, 0, false},
-        {2, 2, 0, 0, false},
-    }};
-    for (const auto &candidate : candidates) {
-        BufferProfile profile;
-        if (!EvaluateBufferProfile(ubSize, usedUbBytes, aDk, candidate.stateOutBufferNum, candidate.attnOutBufferNum,
-                                   profile)) {
-            continue;
-        }
-        if (IsBetterProfile(profile, selected)) {
-            selected = profile;
-        }
-    }
-    
-    OP_LOGD(context_->GetNodeName(), "selected profile: stateOutBufferNum=[%u], attnOutBufferNum=[%u], vStep=[%u], repeatTime=[%u], valid=[%d]",
-            selected.stateOutBufferNum, selected.attnOutBufferNum, selected.vStep, selected.repeatTime, selected.valid);
-
-    if (!selected.valid) {
-        OP_LOGE(context_->GetNodeName(), "vStep should be bigger than 8, shape is too big");
-        return ge::GRAPH_FAILED;
-    }
-    auto stateDtype = context_->GetInputDesc(STATE_INDEX)->GetDataType();
-
-    int64_t stateDtypeSize = (stateDtype == ge::DT_FLOAT) ? 4 : 2;
-
-    int64_t queueCoeff = (stateDtypeSize + static_cast<int64_t>(stateDtypeSize * selected.stateOutBufferNum)) * aDk +
-                         static_cast<int64_t>(4 * selected.attnOutBufferNum);
-    int64_t ubRestBytes = ubSize - ubCalcCtx_.fixedUbBytes - queueCoeff * static_cast<int64_t>(selected.vStep);
-    if (ubRestBytes < 0) {
-        OP_LOGE(context_->GetNodeName(), "ubRestBytes should be non-negative, but got %ld", ubRestBytes);
-        return ge::GRAPH_FAILED;
-    }
-    tilingData_.ubCalSize = compileInfo_.ubSize;
-    tilingData_.vStep = selected.vStep;
-    tilingData_.stateOutBufferNum = selected.stateOutBufferNum;
-    tilingData_.attnOutBufferNum = selected.attnOutBufferNum;
-    tilingData_.ubRestBytes = static_cast<uint32_t>(ubRestBytes);
-    return ge::GRAPH_SUCCESS;
-}
-
-// CalUbSize now runs an ordered UB rule-chain with explicit intermediate states.
 ge::graphStatus RecurrentGatedDeltaRuleTiling::CalUbSize()
 {
-    struct RuleItem {
-        const char *name;
-        HostRuleFn fn;
-    };
-    const std::array<RuleItem, 5> ubRules = {{
-        {"RuleInitUbCalcContext", &RecurrentGatedDeltaRuleTiling::RuleInitUbCalcContext},
-        {"RuleCalcFixedUbBytes", &RecurrentGatedDeltaRuleTiling::RuleCalcFixedUbBytes},
-        {"RuleCalcWorkingUbBytes", &RecurrentGatedDeltaRuleTiling::RuleCalcWorkingUbBytes},
-        {"RuleCalcVStepCoeff", &RecurrentGatedDeltaRuleTiling::RuleCalcVStepCoeff},
-        {"RuleFinalizeVStepFromUb", &RecurrentGatedDeltaRuleTiling::RuleFinalizeVStepFromUb},
-    }};
-    for (const auto &rule : ubRules) {
-        OP_CHECK_IF((this->*(rule.fn))() != ge::GRAPH_SUCCESS,
-                    OP_LOGE(inputParams_.opName, "CalUbSize rule failed: %s", rule.name),
-                    return ge::GRAPH_FAILED);
-    }
-    return ge::GRAPH_SUCCESS;
+    RecurrentGatedDeltaRuleTilingProcessor processor(BuildProcessorContext());
+    return processor.ProcessUb(tilingData_);
 }
 
 static ge::graphStatus RecurrentGatedDeltaRuleTilingFunc(gert::TilingContext *context)

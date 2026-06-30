@@ -1,10 +1,10 @@
 /**
- * Copyright (c) 2025 Tianjin University, Ltd.
- * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
- * Please refer to the License for details. You may not use this file except in compliance with the License.
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
- * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
- */
+ * Copyright (c) 2025 Tianjin University, Ltd.
+ * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+ * Please refer to the License for details. You may not use this file except in compliance with the License.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+ * INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+ */
 
 /*!
  * \file recurrent_gated_delta_rule_tiling.h
@@ -17,6 +17,7 @@
 #include "tiling_base/tiling_base.h"
 #include "err/ops_err.h"
 #include "../op_kernel/recurrent_gated_delta_rule_tiling_data.h"
+#include "recurrent_gated_delta_rule_tiling_processor.h"
 
 namespace optiling {
 using namespace RecurrentGatedDeltaRule;
@@ -45,43 +46,18 @@ protected:
     {
         return true;
     }
-    // 1、获取平台信息比如CoreNum、UB/L1/L0C资源大小
     ge::graphStatus GetPlatformInfo() override;
-    // 2、获取INPUT/OUTPUT/ATTR信息
     ge::graphStatus GetShapeAttrsInfo() override;
-    // 3、计算数据切分TilingData
     ge::graphStatus DoOpTiling() override;
-    // 4、计算高阶API的TilingData
     ge::graphStatus DoLibApiTiling() override;
-    // 5、计算TilingKey
     uint64_t GetTilingKey() const override;
-    // 6、计算Workspace 大小
     ge::graphStatus GetWorkspaceSize() override;
-    // 7、保存Tiling数据
     ge::graphStatus PostTiling() override;
 
 protected:
     void InitCompileInfo();
     void PrintTilingData();
-
-    //Host tiling rule-chain engine: compose shape/UB steps by ordered rules.
-    using HostRuleFn = ge::graphStatus (RecurrentGatedDeltaRuleTiling::*)();
-    struct UbCalcContext {
-        int64_t ubSize = 0;
-        int64_t aNv = 0;
-        int64_t aDv = 0;
-        int64_t aDk = 0;
-        int64_t fixedUbBytes = 0;
-        int64_t workingUbBytes = 0;
-        int64_t coeff = 0;
-    };
-    struct BufferProfile {
-        uint32_t stateOutBufferNum = 1;
-        uint32_t attnOutBufferNum = 1;
-        uint32_t vStep = 0;
-        uint32_t repeatTime = 0;
-        bool valid = false;
-    };
+    RecurrentGatedDeltaRuleTilingContext BuildProcessorContext() const;
 
     ge::graphStatus CheckContext();
     ge::graphStatus AnalyzeDtype();
@@ -90,41 +66,11 @@ protected:
     ge::graphStatus GetScale();
     ge::graphStatus GetOptionalInput();
     ge::graphStatus AnalyzeFormat();
-    //Host tiling refactor helpers: split shape validation/fill and UB calculation.
-    ge::graphStatus CheckShapeDimAndRelation(const gert::Shape &queryShape, const gert::Shape &keyShape,
-                                             const gert::Shape &valueShape, const gert::Shape &betaShape,
-                                             const gert::Shape &stateShape, const gert::Shape &cuSeqlensShape,
-                                             const gert::Shape &ssmStateShape);
-    void FillTilingShapeData(const gert::Shape &queryShape, const gert::Shape &valueShape, const gert::Shape &stateShape,
-                             const gert::Shape &cuSeqlensShape);
-    ge::graphStatus CheckShapeValueRangeAndRule();
-    void UpdateDynamicBlockDimByTaskUnits();
-    int64_t CalcFixedUbBytes(int64_t aNv, int64_t aDv, int64_t aDk) const;
-    int64_t CalcWorkingUbBytes(int64_t aNv, int64_t aDv, int64_t aDk) const;
-    int64_t CalcVStepCoeff(int64_t aDk, uint32_t stateOutBufferNum, uint32_t attnOutBufferNum) const;
-    bool EvaluateBufferProfile(int64_t ubSize, int64_t usedUbBytes, int64_t aDk, uint32_t stateOutBufferNum,
-                               uint32_t attnOutBufferNum, BufferProfile &profile) const;
-    bool IsBetterProfile(const BufferProfile &candidate, const BufferProfile &current) const;
-    ge::graphStatus FinalizeVStepFromUb(int64_t ubSize, int64_t usedUbBytes, int64_t coeff);
-    ge::graphStatus RuleCheckShapeDimAndRelation();
-    ge::graphStatus RuleFillTilingShapeData();
-    ge::graphStatus RuleCheckShapeValueRangeAndRule();
-    ge::graphStatus RuleUpdateDynamicBlockDimByTaskUnits();
-    ge::graphStatus RuleInitUbCalcContext();
-    ge::graphStatus RuleCalcFixedUbBytes();
-    ge::graphStatus RuleCalcWorkingUbBytes();
-    ge::graphStatus RuleCalcVStepCoeff();
-    ge::graphStatus RuleFinalizeVStepFromUb();
-
-    bool CheckDimEqual(const gert::Shape a, const int64_t dimA, gert::Shape b, const int64_t dimB, const std::string &nameA,
-                       const std::string &nameB, const std::string &dimDesc);
-    bool CheckDim(const gert::Shape shape, const size_t dim, const std::string &dimDesc);
     bool CheckFormat(ge::Format format, const std::string &Desc);
 
     RecurrentGatedDeltaRuleCompileInfo compileInfo_;
     RecurrentGatedDeltaRuleTilingData tilingData_;
     RecurrentGatedDeltaRuleInfo inputParams_;
-    UbCalcContext ubCalcCtx_;
 };
 
 } // namespace optiling
