@@ -10,9 +10,9 @@
 add_op_to_compiled_list()
 
 if (BUILD_OPEN_PROJECT)
-    target_sources(op_host_aclnn PRIVATE
+    target_sources(op_host_aclnnExc PRIVATE
         chunk_local_cumsum_def.cpp
     )
 endif()
 
-add_modules_sources(OPTYPE chunk_local_cumsum ACLNNTYPE aclnn)
+add_modules_sources(OPTYPE chunk_local_cumsum ACLNNTYPE aclnn_exclude)
