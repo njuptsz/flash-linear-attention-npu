@@ -37,11 +37,22 @@ using namespace tla;
 
 namespace Catlass::Gemm::Kernel {
 
+struct GDNFwdHTileShapes128 {
+    using L1TileShape = Shape<_128, _128, _128>;
+    using L0TileShape = L1TileShape;
+};
+
+struct GDNFwdHTileShapes256 {
+    using L1TileShape = Shape<_128, _256, _128>;
+    using L0TileShape = Shape<_128, _256, _64>;
+};
+
 template<
     typename INPUT_TYPE,
     typename G_TYPE,
     typename STATE_TYPE,
-    typename WORKSPACE_TYPE
+    typename WORKSPACE_TYPE,
+    typename TileShapes = GDNFwdHTileShapes128
 >
 class GDNFwdHKernel {
 public:
@@ -51,8 +62,8 @@ public:
     using VecScheduler = typename Catlass::Gemm::Block::BlockSchedulerGdnFwdHVec;
 
     using DispatchPolicyTla = Gemm::MmadPingpongTlaMulti<ArchTag, true, false>;
-    using L1TileShapeVTla = Shape<_128, _256, _128>;
-    using L0TileShapeVTla = Shape<_128, _256, _64>;
+    using L1TileShapeVTla = typename TileShapes::L1TileShape;
+    using L0TileShapeVTla = typename TileShapes::L0TileShape;
 
     using WType = Gemm::GemmType<INPUT_TYPE, layout::RowMajor>;
     using HType = Gemm::GemmType<INPUT_TYPE, layout::RowMajor>;

@@ -47,6 +47,10 @@ static constexpr size_t DIM_HEAD_NUM = 1;
 static constexpr size_t DIM_SEQLEN = 2;
 static constexpr size_t DIM_HEAD_DIM = 3;
 
+static constexpr uint32_t TILING_KEY_V128 = 1;
+static constexpr uint32_t TILING_KEY_V256 = 2;
+static constexpr int64_t V_DIM_128 = 128;
+static constexpr int64_t V_DIM_256 = 256;
 
 static void ChunkGatedDeltaRuleFwdHTilingDataPrint(gert::TilingContext *context, ChunkGatedDeltaRuleFwdHTilingData &tiling)
 {
@@ -106,11 +110,25 @@ ge::graphStatus Tiling4ChunkGatedDeltaRuleFwdH(gert::TilingContext *context)
     tilingCtx.aicCoreNum = ascendcPlatform.GetCoreNumAic();
     tilingCtx.libApiWorkSpaceSize = ascendcPlatform.GetLibApiWorkSpaceSize();
 
+    if (tilingCtx.vNumHead % tilingCtx.kNumHead != 0) {
+        OP_LOGE(context->GetNodeName(), "Check head num failed, vNumHead should be divisible by kNumHead.");
+        return ge::GRAPH_FAILED;
+    }
+    if (tilingCtx.vHeadDim > V_DIM_256) {
+        OP_LOGE(context->GetNodeName(), "Check u shape failed, vHeadDim should be <= %ld, but get %ld.",
+                V_DIM_256, tilingCtx.vHeadDim);
+        return ge::GRAPH_FAILED;
+    }
+
     ::ChunkGatedDeltaRuleFwdHTilingData plainTiling{};
     uint32_t blockDim = 0;
     size_t workspaceSize = 0;
     ChunkGatedDeltaRuleFwdHTilingProcessor processor(tilingCtx);
     processor.Process(plainTiling, blockDim, workspaceSize);
+
+    uint32_t tilingKey = plainTiling.vHeadDim > V_DIM_128 ? TILING_KEY_V256 : TILING_KEY_V128;
+    context->SetTilingKey(tilingKey);
+    OP_LOGD(context->GetNodeName(), "tilingKey: %u (vHeadDim=%ld)", tilingKey, plainTiling.vHeadDim);
 
     context->SetBlockDim(blockDim);
     size_t *currentWorkspace = context->GetWorkspaceSizes(1);
