@@ -13,7 +13,6 @@
  */
 
 #include "chunk_bwd_dv_local_tiling_processor.h"
-#include "op_tiling/arch35/chunk_bwd_dv_local_tiling_a5.h"
 #include "../op_kernel/chunk_bwd_dv_local_struct.h"
 
 using namespace GDN;
@@ -44,13 +43,6 @@ ge::graphStatus Tiling4ChunkBwdDvLocal(gert::TilingContext *context)
 {
     OP_LOGD(context->GetNodeName(), "Tiling4ChunkBwdDvLocal start.");
     const auto ascendcPlatform = platform_ascendc::PlatformAscendC(context->GetPlatformInfo());
-    if (ascendcPlatform.GetCurNpuArch() == NpuArch::DAV_3510) {
-        ChunkBwdDvLocalTilingA5 chunkBwdDvLocalTilingA5;
-        OP_CHECK_IF(!chunkBwdDvLocalTilingA5.SetTiling(context),
-                    OP_LOGE(context->GetNodeName(), "SetTiling failed."), return ge::GRAPH_FAILED);
-        return ge::GRAPH_SUCCESS;
-    }
-
     ChunkBwdDvLocalTilingData *tiling = context->GetTilingData<ChunkBwdDvLocalTilingData>();
 
     auto attrPtr = context->GetAttrs();
