@@ -16,9 +16,16 @@ from packaging.version import InvalidVersion, Version
 
 MIN_PYTHON = (3, 9)
 MIN_TORCH = "2.7.0"
-MIN_TORCH_NPU = "2.7.1.post5"
-MIN_TORCH_NPU_MAINLINE_FIX = "2.10.0.post1"
 MIN_TRITON_ASCEND = "3.2.0"
+TORCH_NPU_GDN_FIX_MINIMUMS = {
+    "2.7.1": "2.7.1.post5",
+    "2.8.0": "2.8.0.post5",
+    "2.9.0": "2.9.0.post3",
+    "2.10.0": "2.10.0.post1",
+    "2.11.0": "2.11.0rc3",
+    "2.12.0": "2.12.0rc1",
+}
+MIN_TORCH_NPU_FUTURE_FIX_FAMILY = "2.13.0"
 TORCH_NPU_GDN_FIX_RELEASE_URL = (
     "https://gitcode.com/Ascend/pytorch/releases?"
     "presetConfig={%22tags%22:229,%22release%22:122}"
@@ -111,17 +118,23 @@ def _check_torch_npu_gdn_fix(failures: list[str], actual: str) -> None:
         _fail(failures, f"torch_npu has unsupported version string: {actual}")
         return
 
-    fixed_27 = Version(MIN_TORCH_NPU) <= actual_version < Version("2.8.0")
-    fixed_mainline = actual_version >= Version(MIN_TORCH_NPU_MAINLINE_FIX)
-    if fixed_27 or fixed_mainline:
+    minimum = TORCH_NPU_GDN_FIX_MINIMUMS.get(actual_version.base_version)
+    if minimum and actual_version >= Version(minimum):
         return
 
+    if actual_version >= Version(MIN_TORCH_NPU_FUTURE_FIX_FAMILY):
+        return
+
+    requirements = ", ".join(
+        f"{family}>={minimum}" for family, minimum in TORCH_NPU_GDN_FIX_MINIMUMS.items()
+    )
     _fail(
         failures,
         "torch_npu must come from an Ascend PyTorch release that contains the "
-        "GDN aclnn_extension stream fix. Expected torch_npu>=2.7.1.post5 "
-        "for the 2.7.1 release family, or a fixed PyTorch 2.10 release such as "
-        f"{MIN_TORCH_NPU_MAINLINE_FIX}+ from {TORCH_NPU_GDN_FIX_RELEASE_URL}; got {actual}.",
+        "GDN aclnn_extension stream fix. Packages from releases before "
+        "v26.1.0-beta.1, such as v26.0.0-pytorch2.x, are rejected. "
+        f"Expected one of: {requirements}, or torch_npu>={MIN_TORCH_NPU_FUTURE_FIX_FAMILY} "
+        f"from {TORCH_NPU_GDN_FIX_RELEASE_URL}; got {actual}.",
     )
 
 
