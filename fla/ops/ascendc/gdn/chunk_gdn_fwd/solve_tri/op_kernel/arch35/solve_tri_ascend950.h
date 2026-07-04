@@ -362,49 +362,50 @@ public:
     __aicore__ inline void AicMchNewton(int64_t cur, int64_t actual_size, int64_t x_gm_offset, int64_t row_stride)
     {
         MatmulToL0C(l1_Y, l1_Y, l0a_Y, l0b_Y, l0c_Y, cur, true);
-        SetFlag<AscendC::HardEvent::M_FIX>(0);   // Mmad(M, 写 l0c_Y) -> Fixpipe(FIX, 读 l0c_Y)
+        SetFlag<AscendC::HardEvent::M_FIX>(0);
         WaitFlag<AscendC::HardEvent::M_FIX>(0);
-        // AscendC::PipeBarrier<PIPE_ALL>();
         FixpipeL0cToL1(l1_Y, l0c_Y, cur);
-        AscendC::PipeBarrier<PIPE_ALL>();   // FIX(写 l1_Y) -> 下个 matmul LoadData(MTE1, 读 l1_Y)：无 FIX_MTE1 事件，暂保留全屏障
+        SetFlag<AscendC::HardEvent::FIX_MTE1>(0);
 
         MatmulToL0C(l1_I, l1_X, l0a_X, l0b_X, l0c_X, cur, true);
-        SetFlag<AscendC::HardEvent::M_FIX>(0);   // Mmad(M, 写 l0c_X) -> Fixpipe(FIX, 读 l0c_X)
-        WaitFlag<AscendC::HardEvent::M_FIX>(0);
-        // AscendC::PipeBarrier<PIPE_ALL>();
+        SetFlag<AscendC::HardEvent::M_FIX>(1);
+        WaitFlag<AscendC::HardEvent::M_FIX>(1);
         FixpipeL0cToL1(l1_X, l0c_X, cur);
-        AscendC::PipeBarrier<PIPE_ALL>();   // FIX(写 l1_X) -> 下个 matmul LoadData(MTE1, 读 l1_X)：无 FIX_MTE1 事件，暂保留全屏障
+        SetFlag<AscendC::HardEvent::FIX_MTE1>(1);
 
+        WaitFlag<AscendC::HardEvent::FIX_MTE1>(0);
+        WaitFlag<AscendC::HardEvent::FIX_MTE1>(1);
         MatmulToL0C(l1_X, l1_Y, l0a_X, l0b_X, l0c_X, cur, false);
-        SetFlag<AscendC::HardEvent::M_FIX>(0);   // Mmad(M, 写 l0c_X) -> Fixpipe(FIX, 读 l0c_X)
-        WaitFlag<AscendC::HardEvent::M_FIX>(0);
-        // AscendC::PipeBarrier<PIPE_ALL>();
+        SetFlag<AscendC::HardEvent::M_FIX>(1);
+        WaitFlag<AscendC::HardEvent::M_FIX>(1);
         FixpipeL0cToL1(l1_X, l0c_X, cur);
-        AscendC::PipeBarrier<PIPE_ALL>();   // FIX(写 l1_X) -> 迭代内 matmul LoadData(MTE1, 读 l1_X)：无 FIX_MTE1 事件，暂保留全屏障
+        SetFlag<AscendC::HardEvent::FIX_MTE1>(1);
 
         for (uint64_t iter = 0; iter < 2; iter++) {
             MatmulToL0C(l1_Y, l1_Y, l0a_Y, l0b_Y, l0c_Y, cur, true);
-            SetFlag<AscendC::HardEvent::M_FIX>(0);   // Mmad(M, 写 l0c_Y) -> Fixpipe(FIX, 读 l0c_Y)
+            SetFlag<AscendC::HardEvent::M_FIX>(0);
             WaitFlag<AscendC::HardEvent::M_FIX>(0);
-            // AscendC::PipeBarrier<PIPE_ALL>();
+
             FixpipeL0cToL1(l1_Y, l0c_Y, cur);
-            AscendC::PipeBarrier<PIPE_ALL>();   // FIX(写 l1_Y) -> 下个 matmul LoadData(MTE1, 读 l1_Y)：无 FIX_MTE1 事件，暂保留全屏障
+            SetFlag<AscendC::HardEvent::FIX_MTE1>(0);
+
+            WaitFlag<AscendC::HardEvent::FIX_MTE1>(0);
+            WaitFlag<AscendC::HardEvent::FIX_MTE1>(1);
+
             MatmulToL0C(l1_X, l1_Y, l0a_X, l0b_X, l0c_X, cur, false);
-            SetFlag<AscendC::HardEvent::M_FIX>(0);   // Mmad(M, 写 l0c_X) -> Fixpipe(FIX, 读 l0c_X)
-            WaitFlag<AscendC::HardEvent::M_FIX>(0);
-            // AscendC::PipeBarrier<PIPE_ALL>();
+            SetFlag<AscendC::HardEvent::M_FIX>(1);
+            WaitFlag<AscendC::HardEvent::M_FIX>(1);
+
             if (iter == 1) {
                 if (cur > 16) {
-                    FixpipeL0cToUB(ub_Res, l0c_X, cur);   // -> MBH 消费
+                    FixpipeL0cToUB(ub_Res, l0c_X, cur); // -> MBH 消费
                 } else {
-                    FixpipeL0cToGM(gm_out[x_gm_offset], l0c_X,
-                                   static_cast<uint32_t>(actual_size), static_cast<uint32_t>(cur),
-                                   static_cast<uint32_t>(row_stride));
+                    FixpipeL0cToGM(gm_out[x_gm_offset], l0c_X, static_cast<uint32_t>(actual_size),
+                                   static_cast<uint32_t>(cur), static_cast<uint32_t>(row_stride));
                 }
-                // AscendC::PipeBarrier<PIPE_ALL>();   // 冗余：Process 中随后的 CrossCoreSetFlag<PIPE_FIX> 已 flush FIX
             } else {
                 FixpipeL0cToL1(l1_X, l0c_X, cur);
-                AscendC::PipeBarrier<PIPE_ALL>();   // FIX(写 l1_X) -> 下轮 matmul LoadData(MTE1, 读 l1_X)：无 FIX_MTE1 事件，暂保留全屏障
+                SetFlag<AscendC::HardEvent::FIX_MTE1>(1);
             }
         }
     }
@@ -439,9 +440,9 @@ public:
     }
 
     // ---- AIC：MBH 矩乘（V1 约定，对 A 做块转置预交换，运行期 cur 参数化）----
-    __aicore__ inline void MbhMatmulToL0C(AscendC::LocalTensor<InDtype> l1A,
-                                          AscendC::LocalTensor<InDtype> l1B,
-                                          int64_t cur, bool initC)
+    __aicore__ inline void MbhMatmulToL0C(AscendC::LocalTensor<InDtype> l1A, AscendC::LocalTensor<InDtype> l1B,
+                                          AscendC::LocalTensor<InDtype> l0A, AscendC::LocalTensor<InDtype> l0B,
+                                          AscendC::LocalTensor<float> l0C, int64_t cur, bool initC)
     {
         constexpr int32_t FRAC_LEN = 16 * 16;
         int32_t numFracs = static_cast<int32_t>(cur / 16);
@@ -453,7 +454,7 @@ public:
         loadParamsA.dstGap = 0;
         loadParamsA.ifTranspose = false;
         for (int32_t i = 0; i < numFracs; ++i) {
-            AscendC::LoadData(l0a_X[i * numFracs * FRAC_LEN], l1A[i * numFracs * FRAC_LEN], loadParamsA);
+            AscendC::LoadData(l0A[i * numFracs * FRAC_LEN], l1A[i * numFracs * FRAC_LEN], loadParamsA);
         }
         AscendC::LoadData2DParams loadParamsB;
         loadParamsB.startIndex = 0;
@@ -462,9 +463,9 @@ public:
         loadParamsB.dstGap = 0;
         loadParamsB.ifTranspose = true;
         for (int32_t i = 0; i < numFracs; ++i) {
-            AscendC::LoadData(l0b_X[i * numFracs * FRAC_LEN], l1B[i * FRAC_LEN], loadParamsB);
+            AscendC::LoadData(l0B[i * numFracs * FRAC_LEN], l1B[i * FRAC_LEN], loadParamsB);
         }
-        SetFlag<AscendC::HardEvent::MTE1_M>(0);   // LoadData(MTE1, 写 l0a_X/l0b_X) -> Mmad(M, 读 l0a_X/l0b_X)
+        SetFlag<AscendC::HardEvent::MTE1_M>(0); // LoadData(MTE1, 写 l0a_X/l0b_X) -> Mmad(M, 读 l0a_X/l0b_X)
         WaitFlag<AscendC::HardEvent::MTE1_M>(0);
         // AscendC::PipeBarrier<PIPE_ALL>();
 
@@ -475,20 +476,7 @@ public:
         mmadParams.cmatrixInitVal = initC;
         mmadParams.cmatrixSource = false;
         mmadParams.unitFlag = 0;
-        AscendC::Mmad(l0c_X, l0a_X, l0b_X, mmadParams);
-    }
-
-    __aicore__ inline void MbhMatmulToSlot(AscendC::LocalTensor<InDtype> l1A,
-                                           AscendC::LocalTensor<InDtype> l1B,
-                                           AscendC::LocalTensor<InDtype> l1Dst,
-                                           int64_t cur, bool initC)
-    {
-        MbhMatmulToL0C(l1A, l1B, cur, initC);
-        SetFlag<AscendC::HardEvent::M_FIX>(0);   // Mmad(M, 写 l0c_X) -> Fixpipe(FIX, 读 l0c_X)
-        WaitFlag<AscendC::HardEvent::M_FIX>(0);
-        // AscendC::PipeBarrier<PIPE_ALL>();
-        FixpipeL0cToL1(l1Dst, l0c_X, cur);
-        AscendC::PipeBarrier<PIPE_ALL>();   // FIX(写 l1Dst) -> 调用方下个 matmul LoadData(MTE1, 读 l1Dst)：无 FIX_MTE1 事件，暂保留全屏障
+        AscendC::Mmad(l0C, l0A, l0B, mmadParams);
     }
 
     // ---- AIC：MBH 单层 B/C/E/G 四步矩乘 + 层间/末层写出 ----
@@ -496,30 +484,31 @@ public:
                                        int64_t row_stride, bool lastLevel)
     {
         // step B: L0C = I × I（完整单位阵）
-        MbhMatmulToL0C(l1_I, l1_I, cur, true);
-        SetFlag<AscendC::HardEvent::M_MTE1>(0);   // Mmad(M, 读 l0a_X/l0b_X) -> step C LoadData(MTE1, 覆写 l0a_X/l0b_X) [WAR]
-        WaitFlag<AscendC::HardEvent::M_MTE1>(0);
-        // AscendC::PipeBarrier<PIPE_ALL>();
+        MbhMatmulToL0C(l1_I, l1_I, l0a_X, l0b_X, l0c_X, cur, true);
+
         // step C: Y = drv(l1_X) × (-A) + I -> l1_Y
-        MbhMatmulToSlot(l1_X, l1_MNEG, l1_Y, cur, false);
-        // step E: L0C = Y × oth(l1_INPUT)
-        MbhMatmulToL0C(l1_Y, l1_INPUT, cur, true);
-        SetFlag<AscendC::HardEvent::M_MTE1>(0);   // Mmad(M, 读 l0a_X/l0b_X) -> step G LoadData(MTE1, 覆写 l0a_X/l0b_X) [WAR]
-        WaitFlag<AscendC::HardEvent::M_MTE1>(0);
-        // AscendC::PipeBarrier<PIPE_ALL>();
-        // step G: L0C += I × drv(l1_X)
-        MbhMatmulToL0C(l1_I, l1_X, cur, false);
+        MbhMatmulToL0C(l1_X, l1_MNEG, l0a_Y, l0b_Y, l0c_X, cur, false);
         SetFlag<AscendC::HardEvent::M_FIX>(0);   // Mmad(M, 写 l0c_X) -> Fixpipe(FIX, 读 l0c_X)
         WaitFlag<AscendC::HardEvent::M_FIX>(0);
-        // AscendC::PipeBarrier<PIPE_ALL>();
+        FixpipeL0cToL1(l1_Y, l0c_X, cur);
+        
+        AscendC::PipeBarrier<PIPE_ALL>();
+
+        // step G: L0C += I × drv(l1_X)
+        MbhMatmulToL0C(l1_I, l1_X, l0a_X, l0b_X, l0c_Y, cur, true);
+
+        // step E: L0C = Y × oth(l1_INPUT)
+        MbhMatmulToL0C(l1_Y, l1_INPUT, l0a_Y, l0b_Y, l0c_Y, cur, false);
+        SetFlag<AscendC::HardEvent::M_FIX>(1);   // Mmad(M, 写 l0c_X) -> Fixpipe(FIX, 读 l0c_X)
+        WaitFlag<AscendC::HardEvent::M_FIX>(1);
+
         if (!lastLevel) {
-            FixpipeL0cToUB(ub_Res, l0c_X, cur);   // 层间结果 -> ub_Res，下层提取
+            FixpipeL0cToUB(ub_Res, l0c_Y, cur);   // 层间结果 -> ub_Res，下层提取
         } else {
-            FixpipeL0cToGM(gm_out[x_gm_offset], l0c_X,
+            FixpipeL0cToGM(gm_out[x_gm_offset], l0c_Y,
                            static_cast<uint32_t>(actual_size), static_cast<uint32_t>(cur),
                            static_cast<uint32_t>(row_stride));
         }
-        // AscendC::PipeBarrier<PIPE_ALL>();   // 冗余：Process 中随后的 CrossCoreSetFlag<PIPE_FIX> 已 flush FIX
     }
 
     // ---- Process：CrossCoreFlag + round-robin，MCH 与 MBH 每 tile 逐层握手 ----
