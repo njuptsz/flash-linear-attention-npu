@@ -87,20 +87,24 @@ cd torch_custom/fla_npu && python setup.py build_ext --inplace
 将 <wheel-staging>/fla_npu/opp/vendors/fla_npu_transformer 打进 wheel
 ```
 
-安装后的 wheel 内同时包含 torch 适配 `.so` 和 AscendC OPP 运行产物。用户侧只需要安装 wheel，并在 Python 中 `import fla_npu`；`fla_npu` 会自动设置内嵌 OPP 路径、预加载 `libcust_opapi.so` 并注册 `torch.ops.npu.*`，不需要手动执行 run 包或 source vendor 目录。wheel 构建时会检查 `op_api`、`op_host` 和 `binary_info_config.json` 等关键 OPP 产物，避免打出缺少运行文件的 wheel。
+安装后的 wheel 内同时包含 torch 适配 `.so` 和 AscendC OPP 运行产物。用户侧只需要安装 wheel，并在 Python 中 `import fla_npu`；`fla_npu` 会自动设置内嵌 OPP 路径、预加载 `libcust_opapi.so` 并注册 `torch.ops.npu.*`，不需要手动执行 run 包或 source vendor 目录。wheel 构建时会检查 `op_api`、`op_host` 和 `binary_info_config.json` 等关键 OPP 产物，避免打出缺少运行文件的 wheel。正式 release wheel 文件名使用 `26.6.0-<product>.<arch>-py3-none-any.whl`，主线开发 wheel 文件名使用 `26.7.0.dev0+main.<commit7>-<product>.<arch>-py3-none-any.whl`；其中 `910b`、`910_93`、`950` 区分 A2/A3/A5，`aarch64` / `x86_64` 区分架构。
 
 可用环境变量：
 
 | 环境变量 | 作用 | 默认 |
 |---|---|---|
 | `FLA_NPU_SOC` | 目标芯片 | `ascend910b` |
+| `FLA_NPU_BRANCH_NAME` | 分支标识；为 `main` 时 package version 追加 `+main.<commit7>`，稳定分支默认不追加 local version | 自动识别 |
+| `FLA_NPU_COMMIT_ID` | 主线 package local version 中的 commit 标识；自动截取 7 位 | 当前 git HEAD |
+| `FLA_NPU_ARCH` | wheel build tag 中的架构标识；可设为 `aarch64` 或 `x86_64`，也兼容 `arm`/`x86` 输入并归一化为完整架构名 | 当前机器架构 |
+| `FLA_NPU_WHEEL_BUILD_TAG` | 覆盖 wheel build tag；未以数字开头时会自动补 `1` 以满足 wheel 规范 | 自动生成 |
 | `FLA_NPU_INCREMENTAL_BUILD` | 复用 `build/` 做完整 wheel 的真增量构建 | `FALSE` |
 | `FLA_NPU_OPS` | 单算子过滤，生成 partial OPP 调试包；不要用于 release wheel | 空 |
 | `FLA_NPU_SKIP_RUN_BUILD` | 跳过 run 包编译 | `FALSE` |
 | `FLA_NPU_SKIP_RUN_INSTALL` | 跳过将 run 包安装产物内嵌到 wheel | `FALSE` |
 | `FLA_NPU_SKIP_TORCH_GEN` | 跳过 torchnpugen 代码生成 | `FALSE` |
 | `FLA_NPU_OPP_PATH` | 运行时指定外部 OPP root 或 vendor 目录 | wheel 内嵌 OPP |
-| `FLA_NPU_DISABLE_LOCAL_VERSION` | wheel 版本号不追加 SOC/torch/ABI 本地版本 | `FALSE` |
+| `FLA_NPU_DISABLE_LOCAL_VERSION` | 禁用自动生成的 main local version 和产品 / 架构 build tag | `FALSE` |
 
 安装后可验证：
 
