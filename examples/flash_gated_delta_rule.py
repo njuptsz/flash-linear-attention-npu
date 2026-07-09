@@ -15,10 +15,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_npu
-import fla_npu  # noqa: F401
 
 from fla.ops.triton.triton_core.causal_conv1d import causal_conv1d_triton
 from fla.ops.triton.triton_core.chunk_scaled_dot_kkt import chunk_scaled_dot_kkt_fwd
+from fla.ops.triton.triton_core.cumsum import chunk_local_cumsum
 from fla.ops.triton.triton_core.l2norm import l2norm_bwd, l2norm_fwd
 from fla.ops.triton.triton_core.solve_tril_fast import solve_tril_npu as solve_tril
 from fla.ops.triton.triton_core.utils import autocast_custom_bwd, autocast_custom_fwd, input_guard
@@ -108,50 +108,9 @@ def _next_power_of_2(value: int) -> int:
 
 
 def _cumsum_block_t(g: torch.Tensor, chunk_size: int) -> int:
-    # npu_chunk_local_cumsum consumes this example's [B, T, H] gates as [B, H, T].
-    # The AscendC tiling therefore has tail=1 for rank-3 gates.
-    del g
-    return _next_power_of_2((1 << 17) // int(chunk_size))
-
-
-def _chunk_tensor_for_block_t(
-    chunk_indices: Optional[Dict[str, Optional[torch.LongTensor]] | torch.LongTensor],
-    block_t: int,
-) -> Optional[torch.LongTensor]:
-    if chunk_indices is None:
-        return None
-    if isinstance(chunk_indices, dict):
-        return chunk_indices.get(str(block_t))
-    return chunk_indices
-
-
-def _chunk_local_cumsum_npu(
-    g: torch.Tensor,
-    chunk_size: int,
-    reverse: bool = False,
-    scale: Optional[float] = None,
-    cu_seqlens: Optional[torch.LongTensor] = None,
-    chunk_indices_out: Optional[Dict[str, Optional[torch.LongTensor]] | torch.LongTensor] = None,
-) -> torch.Tensor:
-    if g.ndim != 3:
-        raise ValueError(f"npu_chunk_local_cumsum wrapper expects [B, T, H], got {tuple(g.shape)}.")
-
-    block_t = _cumsum_block_t(g, chunk_size)
-    chunk_indices_tensor = _chunk_tensor_for_block_t(chunk_indices_out, block_t)
-    if cu_seqlens is not None and chunk_indices_tensor is None:
-        chunk_indices_tensor = prepare_chunk_indices(cu_seqlens, block_t)
-
-    out = torch.ops.npu.npu_chunk_local_cumsum(
-        g.transpose(1, 2).contiguous().float(),
-        chunk_size,
-        cu_seqlens=cu_seqlens,
-        chunk_indices_out=chunk_indices_tensor,
-        reverse=reverse,
-        scale=1.0 if scale is None else float(scale),
-        head_first=True,
-        output_dtype="float32",
-    )
-    return out.transpose(1, 2).contiguous()
+    # Keep this aligned with fla.ops.triton.triton_core.cumsum.chunk_local_cumsum_scalar.
+    h = int(g.shape[-1])
+    return _next_power_of_2((1 << 17) // max(1, h * int(chunk_size)))
 
 
 def _ensure_varlen_metadata(
@@ -224,11 +183,12 @@ def flash_chunk_gated_delta_rule_fwd(
     chunk_indices_list: Optional[Dict[str, Optional[list[int]]]] = None,
     chunk_size: int = 64,
 ):
-    g = _chunk_local_cumsum_npu(
+    g = chunk_local_cumsum(
         g,
         chunk_size=chunk_size,
         cu_seqlens=cu_seqlens,
         chunk_indices_out=chunk_indices,
+        head_first=False,
     )
 
     # A is the WY lower-triangular representation before inversion.
@@ -439,12 +399,13 @@ def flash_chunk_gated_delta_rule_bwd(
     if dg.dtype != torch.float32:
         raise ValueError(f"dg current type is {dg.dtype}, should be float32")
 
-    dg = _chunk_local_cumsum_npu(
+    dg = chunk_local_cumsum(
         dg,
         chunk_size=chunk_size,
         reverse=True,
         cu_seqlens=cu_seqlens,
         chunk_indices_out=chunk_indices,
+        head_first=False,
     )
 
     return dq, dk, dv, db, dg, dh0
